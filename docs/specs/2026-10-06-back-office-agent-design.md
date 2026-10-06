@@ -1,7 +1,7 @@
 # P2: Back-office agent with approval — design
 
 - **Status:** approved by Felipe on 2026-10-06 ("todas ok"): P2-01 to P2-29 of §10. The `[P]` tags stay as a record; later documents cite these items as `[D: P2-nn]`.
-- **Build decisions:** PB-01 to PB-16, approved by Felipe on 2026-10-07 ("todas ok"), are in §11. The rule-6 corrections they call for are made in place, each with a dated note: §4.3 (PB-13), §4.8 (PB-15), §5 (PB-09, PB-13, PB-16), §7 step 5 (PB-16 and the parallel-calls check) and §9's X-03 row.
+- **Build decisions:** PB-01 to PB-16, approved by Felipe on 2026-10-07 ("todas ok"), are in §11. The rule-6 corrections they call for are made in place, each with a dated note: §4.2 (PB-15, parallel calls off), §4.3 (PB-13), §4.8 (PB-15), §5 (PB-09, PB-13, PB-16), §7 step 5 (PB-16 and the parallel-calls check) and §9's X-03 row.
 - **What it carries out:** P2 of `portfolio/ROADMAP.md`: "a back office in the style of reference 8: requests, a kanban and an agent panel that acts only after approval", with 3–4 tools, an approve/reject card, and "share of 20–25 frozen requests that end in the expected sandbox state" [D: Q1, S2, ROADMAP line 38]; one fictional world, "P2 executes, after approval, what P1 hands to a human" [D: Q4]; the cuts "a fixed kanban and inbox; the sandbox state lives in the browser, so no Upstash and no signed approvals; the audit log is the list of the conversation's tool calls" [D: S9]; light process: this short spec, build, one review [D: S1].
 - **Starts from:** the template at `89d3cca` (its code equals `75c443f`, X-02) [F], and P1's store (customers, orders, help center) copied at `f56063b` [D: X2-05].
 - **Reference 8:** Plane's AI panel on its kanban, where nothing changes until you confirm (docs.plane.so/ai/plane-ai) [P: inferred; ROADMAP line 24 does not list references 7–9].
@@ -121,7 +121,7 @@ The first test is the route round trip with the mock: approve then continue (the
 3. Build, round-trip test first; all local, mock only.
 4. Felipe approves the texts: the 21 cases with their required phrases, the instructions, the strings in both languages, the README. Then the cases freeze.
 5. One real run (cost from the Gateway dashboard), its JSON and README lines committed; a hand check of the transcripts. (Added 2026-10-07: the hand check reads every closing note [D: PB-16]; the first real request shows whether the Gateway accepts `providerOptions.openai.parallelToolCalls` (§4.2), since Preview runs the mock and nothing has sent it yet; and the committed run must pass "the shown run" test in `lib/eval/project.test.ts`, at most one tool call per model step.)
-6. Deploy; production check with one live approve and one live reject; Felipe's phone pass (with an Enter in the composer on Android, W-P12); Portuguese by hand.
+6. Deploy; production check with one live approve and one live reject; Felipe's phone pass (with an Enter in the composer on Android, W-P12; in landscape, the request page scrolls and the conversation keeps at least a screen; with VoiceOver, where the focus lands after Approve or Reject); Portuguese by hand.
 7. Rule-6 notes: ROADMAP lines 38 and 46 (P2-02, P2-03), template spec §15 and X-02 design on the drawer P2 does not copy, the app shell's "P2's agent panel toggle" comment (at X-03), ROADMAP's P2 status.
 
 Size: 2–3 agent days [D: ROADMAP]; the approval round trip and the history are first of their kind here, so the upper half [P: estimate].
@@ -147,6 +147,11 @@ Verdicts on the triggers that named P2's design: the `useChat` approval seams an
 | Requests written by the visitor (a live injection demo) | The number is published and Felipe wants one |
 | Repeat runs (pass^k) | Felipe approves a paid repeat |
 | Provenance links going stale | P1 records a new run: re-check them |
+| The review of PB-15 (2026-10-07), its minors, each deferred: parallel calls are off through the `openai` key only, so a request the Gateway serves from another provider may still carry two calls (the gate denies the second) | The real-run check that no step carried two tool calls fails |
+| In r20 and r21 the eval's rejection carries the case's reason, while a live Reject sends a fixed text, so the two histories differ | The hand check of r20 and r21 finds the reason changed what the agent did |
+| After a decision, the focus reaches the composer before it turns writable; on touch screens the focus is not moved at all; in landscape the conversation keeps its own overscroll | Felipe's phone and VoiceOver pass at step 6 |
+| `tests/x03-seams.test.ts` checks the listed seams, not that the list is complete | X-03 starts: it derives the list again from the diff against the template |
+| On a case page, a decision that did not run is named without its request id | The real run's case pages, read in the hand check |
 | X-03 takes from P2 (rule-6 note, 2026-10-07): the approval card (`components/approval/approval-card.tsx`); the Chat approval seams, with the header that can send ("Handle this request"), in `components/chat/chat.tsx`, `message-list.tsx` and `composer.tsx`; `awaitsApproval` and the other approval helpers in `lib/chat/ui.ts`; the "Approval needed" key (`status.approvalNeeded` in `lib/i18n/shell-messages.ts`); the history whitelist (`lib/chat/validate.ts`); P1's README test if P2 copies it (it has not: P2's README checks are the counts and sentences in `lib/eval/project.test.ts`, "the README"). The full list of files, seams and owning tests, pass A's smaller shell changes included, is `tests/x03-seams.test.ts` | P2 ships, before P4 starts [D: X2-06] |
 
 If the build runs late, cut first the provenance links, then the live order update on the request pane; the Board, the card, the gate, the round trip and the eval stay. Trigger: the round-trip test and the gate are not green at the end of agent day 2.
