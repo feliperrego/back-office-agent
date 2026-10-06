@@ -21,6 +21,21 @@ export type OrderItem = { name: string; variant?: string; quantity: number; pric
 export type Refund = { amount: number; issuedOn: string; to: string };
 
 /**
+ * A return the back office authorized, P2's one addition to P1's store (spec §3 B3, P2-06, P2-08):
+ * the whole order comes back, its total is refunded to the original payment method when the
+ * return arrives, and the customer pays the return shipping. The status stays "delivered". Only
+ * the agent's approved write adds one; the seed has none.
+ */
+export type ReturnAuthorization = {
+  /** The day of the approval: today (spec §3 B1). */
+  authorizedOn: string;
+  /** US dollars: the order's total. */
+  refundOnArrival: number;
+  to: "original payment method";
+  returnShippingPaidBy: "customer";
+};
+
+/**
  * One order. Dates are store dates (lib/store/dates.ts). Which optional fields an order has
  * follows from its status: tests/customers.test.ts pins the rule.
  */
@@ -39,6 +54,8 @@ export type Order = {
   /** Only while the order is on its way. */
   estimatedDelivery?: string;
   deliveredOn?: string;
+  /** Only on a delivered order, inside its return window. */
+  returnAuthorization?: ReturnAuthorization;
   /** The day a returned order arrived back at the warehouse. */
   returnReceivedOn?: string;
   refund?: Refund;

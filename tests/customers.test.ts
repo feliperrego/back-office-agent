@@ -8,15 +8,15 @@ import {
   storeData,
   type Order,
   type OrderStatus,
+  type StoreData,
 } from "@/lib/store/customers";
 import { BUSINESS_DAYS_FROM, BUSINESS_DAYS_TO, businessDaysAfter } from "@/lib/store/business-days";
 import { parseStoreDate } from "@/lib/store/dates";
 
 // P1's fictional customers (spec §2, P2-06), checked against the policies of spec §3, so an order
 // never contradicts the help center the agent applies. Copied from P1's tests/customers.test.ts
-// at f56063b (P2-25).
-const { customers } = storeData;
-const orders = customers.flatMap((customer) => customer.orders);
+// at f56063b (P2-25), and run on every store P2 can reach: the seed, and the seed after the
+// agent's writes (spec §3 B3).
 
 const DAY_MS = 86_400_000;
 // Business days skip US federal holidays, as the shipping article says; lib/store/business-days.ts
@@ -42,6 +42,7 @@ const ORDER_FIELDS = [
   "trackingUrl",
   "estimatedDelivery",
   "deliveredOn",
+  "returnAuthorization",
   "returnReceivedOn",
   "refund",
 ];
@@ -53,15 +54,40 @@ const DATE_FIELDS = [
   "returnReceivedOn",
 ] as const;
 
-// The optional fields each status has; it has none of the others.
+// The optional fields each status has, and those it may have; it has none of the others. P1's
+// rule, plus a delivered order's return authorization (spec §3 B3), which only the agent writes.
 const SHIPPED = ["shippedOn", "trackingNumber", "trackingUrl"];
-const FIELDS_BY_STATUS: Record<OrderStatus, string[]> = {
-  processing: [],
-  shipped: [...SHIPPED, "estimatedDelivery"],
-  delivered: [...SHIPPED, "deliveredOn"],
-  returned: [...SHIPPED, "deliveredOn", "returnReceivedOn", "refund"],
+const FIELDS_BY_STATUS: Record<OrderStatus, { has: string[]; mayHave: string[] }> = {
+  processing: { has: [], mayHave: [] },
+  shipped: { has: [...SHIPPED, "estimatedDelivery"], mayHave: [] },
+  delivered: { has: [...SHIPPED, "deliveredOn"], mayHave: ["returnAuthorization"] },
+  returned: { has: [...SHIPPED, "deliveredOn", "returnReceivedOn", "refund"], mayHave: [] },
 };
 const OPTIONAL_FIELDS = ORDER_FIELDS.slice(ORDER_FIELDS.indexOf("shippedOn"));
+
+/** The seed with a return authorized on each order named, dated today, as B1 and B3 write it. */
+function withReturnsAuthorized(ids: string[]): StoreData {
+  const store = structuredClone(storeData);
+  for (const order of store.customers.flatMap((customer) => customer.orders)) {
+    if (!ids.includes(order.id)) continue;
+    order.returnAuthorization = {
+      authorizedOn: store.asOf,
+      refundOnArrival: order.total,
+      to: "original payment method",
+      returnShippingPaidBy: "customer",
+    };
+  }
+  return store;
+}
+
+const STORES: [string, StoreData][] = [
+  ["data/customers.json", storeData],
+  // AO-10468 is on day 9 of its window, AO-10351 on day 30, still inside it (spec §3 B10).
+  [
+    "the seed with returns authorized on AO-10468 and AO-10351",
+    withReturnsAuthorized(["AO-10468", "AO-10351"]),
+  ],
+];
 
 describe("data/customers.json (spec §2, P2-06)", () => {
   it("is P1's file at f56063b, byte for byte", () => {
@@ -70,6 +96,25 @@ describe("data/customers.json (spec §2, P2-06)", () => {
       "277e81c7f9089550d1840871ea23dd4779127af3d292ca2487c7b6ee637852ba",
     );
   });
+
+  it("holds no return authorization: only the agent writes one", () => {
+    const orders = storeData.customers.flatMap((customer) => customer.orders);
+    expect(orders.filter((order) => "returnAuthorization" in order)).toEqual([]);
+  });
+
+  it("builds the store after two approved returns, so the checks below run on it too", () => {
+    const [, [, authorized]] = STORES;
+    const orders = authorized.customers.flatMap((customer) => customer.orders);
+    expect(orders.filter((order) => order.returnAuthorization).map(({ id }) => id)).toEqual([
+      "AO-10351",
+      "AO-10468",
+    ]);
+  });
+});
+
+describe.each(STORES)("%s (spec §2, §3)", (_, store) => {
+  const { customers } = store;
+  const orders = customers.flatMap((customer) => customer.orders);
 
   it("holds 5 customers with their own ids, names and .example e-mails", () => {
     expect(customers).toHaveLength(5);
@@ -81,7 +126,7 @@ describe("data/customers.json (spec §2, P2-06)", () => {
       expect(id).toMatch(/^cus-\d{2}$/);
       expect(email).toMatch(/^[a-z.]+@[a-z]+\.example$/);
     }
-    expect(storeData.currency).toBe("USD");
+    expect(store.currency).toBe("USD");
   });
 
   it("gives each customer 2 or 3 orders, with ids unique across the store", () => {
@@ -102,17 +147,19 @@ describe("data/customers.json (spec §2, P2-06)", () => {
   it("gives each status exactly its fields", () => {
     for (const order of orders) {
       for (const key of Object.keys(order)) expect(ORDER_FIELDS, order.id).toContain(key);
-      const present = OPTIONAL_FIELDS.filter((field) => field in order);
-      expect(present, order.id).toEqual(FIELDS_BY_STATUS[order.status]);
+      const { has, mayHave } = FIELDS_BY_STATUS[order.status];
+      const present = OPTIONAL_FIELDS.filter((field) => field in order && !mayHave.includes(field));
+      expect(present, order.id).toEqual(has);
     }
   });
 
   it("writes every date as a store date inside the year the holiday list covers", () => {
     const dates = [
-      storeData.asOf,
+      store.asOf,
       ...orders.flatMap((order) => [
         ...DATE_FIELDS.flatMap((field) => order[field] ?? []),
         ...(order.refund ? [order.refund.issuedOn] : []),
+        ...(order.returnAuthorization ? [order.returnAuthorization.authorizedOn] : []),
       ]),
     ];
     for (const date of dates) {
@@ -122,12 +169,13 @@ describe("data/customers.json (spec §2, P2-06)", () => {
   });
 
   it("dates each order's steps in order, none after asOf except an estimated delivery", () => {
-    const asOf = parseStoreDate(storeData.asOf).getTime();
+    const asOf = parseStoreDate(store.asOf).getTime();
     for (const order of orders) {
       const steps = [
         order.placedOn,
         order.shippedOn,
         order.deliveredOn,
+        order.returnAuthorization?.authorizedOn,
         order.returnReceivedOn,
         order.refund?.issuedOn,
       ]
@@ -200,6 +248,32 @@ describe("data/customers.json (spec §2, P2-06)", () => {
       // B4), so a returned order shipped free and its refund is its total.
       expect(order.shippingCost, order.id).toBe(0);
       expect(cents(refund.amount), order.id).toBe(cents(order.total));
+    }
+  });
+
+  it("authorizes a return as spec §3 B3 says: today, inside the window, the total on arrival", () => {
+    for (const order of orders.filter((item) => item.returnAuthorization)) {
+      const { deliveredOn, returnAuthorization } = order;
+      if (!deliveredOn || !returnAuthorization) throw new Error(`${order.id} is incomplete`);
+      expect(Object.keys(returnAuthorization).sort(), order.id).toEqual([
+        "authorizedOn",
+        "refundOnArrival",
+        "returnShippingPaidBy",
+        "to",
+      ]);
+      // Every write is dated today (B1); day 30 after the delivery is inside the window (B10).
+      expect(returnAuthorization.authorizedOn, order.id).toBe(store.asOf);
+      const day =
+        (parseStoreDate(returnAuthorization.authorizedOn).getTime() -
+          parseStoreDate(deliveredOn).getTime()) /
+        DAY_MS;
+      expect(day >= 0 && day <= 30, `${order.id}: day ${day}`).toBe(true);
+      // The whole order, its total (B3); a shipping refund goes to manual handling (B4), so an
+      // authorized order shipped free.
+      expect(order.shippingCost, order.id).toBe(0);
+      expect(cents(returnAuthorization.refundOnArrival), order.id).toBe(cents(order.total));
+      expect(returnAuthorization.to, order.id).toBe("original payment method");
+      expect(returnAuthorization.returnShippingPaidBy, order.id).toBe("customer");
     }
   });
 
