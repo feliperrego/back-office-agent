@@ -9,6 +9,7 @@ import {
   isChatPost,
   regenerateButtons,
   retryButton,
+  scroller,
   statusRegion,
   userBubbles,
   type ChatRequestBody,
@@ -308,8 +309,121 @@ test("in Portuguese the request page, its card and its result show no English in
   await expect(orderOf(page, "AO-10468").getByTestId("return-authorized")).toHaveText(
     "Devolução autorizada: US$ 149,00 na chegada",
   );
+  // The mock answers in English whatever the interface language, so its text says so (the
+  // review's m12); the real model answers in Portuguese here.
+  await expect(answerText(assistantBubbles(page))).toHaveAttribute("lang", "en");
   await expectNoEnglish(page);
 });
+
+// The review's m11: a decision's card names its request before the call runs (spec §4.1,
+// "Request decision: r06"), and so does its chip once a person rejected it.
+test("a decision's card and its chip name the request, in both languages", async ({ page }) => {
+  await page.goto("/requests/r06");
+  await handle(page);
+  await expect(card(page).getByRole("heading", { level: 3 })).toHaveText("Request decision: r06");
+  await card(page).getByRole("button", { name: "Reject" }).click();
+  await expect(callOf(page, "closeRequest")).toHaveAttribute("data-tool-state", "denied", {
+    timeout: 20_000,
+  });
+  await expect(callOf(page, "closeRequest").getByRole("button")).toContainText(
+    "Request decision: r06",
+  );
+
+  await page.goto("/requests/r06?lang=pt-BR");
+  await expectPortuguese(page);
+  await handle(page, HANDLE_PT);
+  await expect(card(page).getByRole("heading", { level: 3 })).toHaveText(
+    "Decisão da solicitação r06",
+  );
+});
+
+// The review's m08: answering a card by keyboard keeps the focus on the page. The answered card
+// unmounts with its focused button, so the focus moves to the composer.
+for (const [path, name] of [
+  ["/requests/r01", "Approve"],
+  ["/requests/r02", "Reject"],
+] as const) {
+  test(`${name} pressed by keyboard leaves the focus on the composer`, async ({ page }) => {
+    await page.goto(path);
+    await handle(page);
+    await card(page).getByRole("button", { name }).focus();
+    await page.keyboard.press("Enter");
+    await expect(card(page)).toHaveCount(0, { timeout: 20_000 });
+    await expect(composer(page)).toBeFocused();
+    await waitUntilIdle(page);
+    await expect(composer(page)).toBeFocused();
+  });
+}
+
+// The review's m09: the agent panel is a landmark, named by its heading, so landmark navigation
+// reaches its bar, its conversation and its composer; the request pane is the <aside>.
+test("the agent panel is a region named by its heading, holding its bar, conversation and composer", async ({
+  page,
+}) => {
+  for (const [path, name, handleName, newChat, send] of [
+    ["/requests/r01", "Agent", HANDLE_EN, "New chat", "Send message"],
+    ["/requests/r01?lang=pt-BR", "Agente", HANDLE_PT, "Nova conversa", "Enviar mensagem"],
+  ] as const) {
+    await page.goto(path);
+    const panel = page.getByRole("region", { name, exact: true });
+    await expect(panel).toHaveCount(1);
+    for (const button of [handleName, newChat, send]) {
+      await expect(panel.getByRole("button", { name: button, exact: true })).toBeVisible();
+    }
+    await expect(panel.getByRole("textbox")).toBeVisible();
+    await expect(panel.getByRole("main")).toHaveCount(1);
+    await expect(page.getByRole("main")).toHaveCount(1);
+    await expect(page.getByRole("complementary")).toHaveCount(1);
+  }
+});
+
+// The review's m07: on a phone in landscape the page is shorter than its chrome, so it scrolls,
+// and the agent panel keeps one screen's height: the conversation stays usable and the card can
+// be read and answered.
+for (const [width, height] of [
+  [667, 375],
+  [812, 375],
+] as const) {
+  test.describe(`a phone in landscape at ${width}×${height} with touch`, () => {
+    test.use({ viewport: { width, height }, hasTouch: true, isMobile: true });
+
+    test("the card's title and both buttons can be brought into view, and Approve answers it", async ({
+      page,
+    }) => {
+      await page.goto("/requests/r01");
+      await handleButton(page).tap();
+      await expect(card(page)).toBeVisible({ timeout: 20_000 });
+      await waitUntilIdle(page);
+      expect((await scroller(page).boundingBox())!.height).toBeGreaterThanOrEqual(180);
+
+      const title = card(page).getByRole("heading", { level: 3 });
+      const approve = card(page).getByRole("button", { name: "Approve" });
+      const reject = card(page).getByRole("button", { name: "Reject" });
+      for (const target of [title, approve, reject]) {
+        await target.scrollIntoViewIfNeeded();
+        await expect(target).toBeInViewport({ ratio: 1 });
+        // Nothing covers it: a tap at its centre lands on it.
+        const onTop = await target.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+          return hit !== null && element.contains(hit);
+        });
+        expect(onTop).toBe(true);
+      }
+      const widths = await page.evaluate(() => ({
+        scroll: document.documentElement.scrollWidth,
+        client: document.documentElement.clientWidth,
+      }));
+      expect(widths.scroll).toBeLessThanOrEqual(widths.client);
+
+      await approve.scrollIntoViewIfNeeded();
+      await approve.tap();
+      await expect(resultLine(page, "authorizeReturn")).toHaveText("Applied · approved by you", {
+        timeout: 20_000,
+      });
+    });
+  });
+}
 
 test.describe("a phone at 375×812 with touch", () => {
   test.use({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true });

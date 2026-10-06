@@ -164,7 +164,9 @@ function approvalOf(
 /**
  * The approvals a person still has to answer in a message, by approval id (the id that
  * addToolApprovalResponse takes, not the call's): its cards. A decision the server took by itself
- * is never one (P2's spec §4.5).
+ * is never one (P2's spec §4.5). This helper and the four below, with regenerateSlot's and
+ * announcement's approval rules, are P2's approval seams, listed for X-03
+ * (tests/x03-seams.test.ts).
  */
 export function pendingApprovals(message: UIMessage): string[] {
   return message.parts.flatMap((part) => {

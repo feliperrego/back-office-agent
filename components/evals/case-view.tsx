@@ -13,8 +13,9 @@ import { RunLabelView } from "./run-label";
  * One case of the shown run (template spec §5.12): its question and recorded answer, then its
  * trace (template spec §5.10): the verdict and each check, the tool calls as chips, and the
  * tokens and latency. A mock run measures no tokens and no latency, so its usage block says so
- * instead of showing the mock's figures. The question and the answer are recorded English text,
- * marked lang="en". It names the browser tab in the interface language (usePageTitle).
+ * instead of showing the mock's figures. The question, the texts it came with and the answer are
+ * recorded English text, marked lang="en"; a text's label is the interface's, such as P2's
+ * Support's note (X-03). It names the browser tab in the interface language (usePageTitle).
  */
 export function CaseView({ data }: { data: CaseViewData }) {
   const { locale, t } = useLocale();
@@ -46,6 +47,19 @@ export function CaseView({ data }: { data: CaseViewData }) {
             <p lang="en" className="whitespace-pre-wrap wrap-anywhere">
               {data.exchange.question}
             </p>
+            {data.exchange.notes?.map((note, index) => (
+              <div key={index} className="flex flex-col gap-1 pt-2">
+                <p
+                  data-testid="exchange-note-label"
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  {note.label[locale]}
+                </p>
+                <p lang="en" className="whitespace-pre-wrap wrap-anywhere">
+                  {note.text}
+                </p>
+              </div>
+            ))}
           </Block>
           <Block title={t.evals.answer}>
             <p lang="en" className="whitespace-pre-wrap wrap-anywhere">

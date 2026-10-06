@@ -43,7 +43,8 @@ function render(
   {
     canRespond = true,
     sandbox = openSandbox("r01"),
-  }: { canRespond?: boolean; sandbox?: Sandbox } = {},
+    isMock = false,
+  }: { canRespond?: boolean; sandbox?: Sandbox; isMock?: boolean } = {},
 ): string {
   return renderToStaticMarkup(
     createElement(
@@ -56,10 +57,20 @@ function render(
         respond: () => {},
         canRespond,
         sandbox,
+        isMock,
       }),
     ),
   );
 }
+
+/** A closeRequest call of r06, in the given state. */
+const decision = (part: Record<string, unknown>) =>
+  ({
+    type: "tool-closeRequest",
+    toolCallId: "call-2",
+    input: { outcome: "declined", code: "outside-window", note: "Day 36 of 30." },
+    ...part,
+  }) as unknown as Part;
 
 const ROOT = /^<div data-message-role="assistant"[^>]*><div[^>]*>/;
 
@@ -151,6 +162,34 @@ describe("AgentMessage", () => {
       new RegExp(
         `data-tool="authorizeReturn" data-tool-state="${state}"[\\s\\S]*<p data-approval-result="[a-z]+"[^>]*>${line}</p>`,
       ),
+    );
+  });
+
+  // The review's m11: the decision's card and chip are titled by the request before the call
+  // runs (spec §4.1, "Request decision: r06"); the call's output names it only once it ran.
+  it("titles a decision's card and its chip by the page's request before it runs", () => {
+    const sandbox = openSandbox("r06");
+    const waiting = render(
+      answer([decision({ state: "approval-requested", approval: { id: "ap-1" } })]),
+      { sandbox },
+    );
+    expect(waiting).toMatch(/<h3[^>]*>Request decision: r06<\/h3>/);
+    const rejected = render(
+      answer([decision({ state: "output-denied", approval: { id: "ap-1", approved: false } })]),
+      { sandbox },
+    );
+    expect(rejected).toContain("Request decision: r06");
+  });
+
+  // The review's m12: the mock answers in English whatever the interface language (Preview and
+  // CI), so its text is marked English; the real model answers in the interface language.
+  it("marks the mock's text as English, and the real model's text as the page's language", () => {
+    const text = answer([READ], "Applied. Request r01 is now done.");
+    expect(render(text, { isMock: true })).toMatch(
+      /^<div data-message-role="assistant"[^>]*><div lang="en"[^>]*>Applied\./,
+    );
+    expect(render(text, { isMock: false })).toMatch(
+      /^<div data-message-role="assistant"[^>]*><div class="[^"]*">Applied\./,
     );
   });
 

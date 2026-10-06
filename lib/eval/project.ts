@@ -51,7 +51,7 @@ import type { EvalsPage } from "./view";
  * lib/chat/validate.ts, as the route runs it), in English, and a scripted reviewer answers every
  * card: it approves, the careless reviewer, except in the reject cases, where it rejects with the
  * case's reason. Each answer continues the same assistant message, as the browser does, for at
- * most MAX_ROUNDS requests. The final orders, status, code and note come from the fold of that
+ * most MAX_APPROVAL_ROUNDS rounds of answered cards. The final orders, status, code and note come from the fold of that
  * conversation (lib/sandbox/fold.ts), as the browser's request pane reads them. Scored by script,
  * with no LLM judge: S (orders), O (status and code), A (one of an answered case's phrases), R (a
  * reject case's rejection), after three hard failures. Project-owned: it keeps the EVAL_PROJECT and
@@ -61,8 +61,13 @@ import type { EvalsPage } from "./view";
 /** The one message every case sends: what the request page's button sends (spec §1). */
 export const HANDLE_REQUEST_MESSAGE = "Handle this request.";
 
-/** At most this many requests to the agent per case (spec §4.8): the first, then continuations. */
-export const MAX_ROUNDS = 3;
+/**
+ * At most this many approval rounds per case (spec §4.8): rounds in which the reviewer answers
+ * every card that waits, each answer sent as one more request to the agent. So a case makes at
+ * most MAX_APPROVAL_ROUNDS + 1 requests, and a card that still waits after the last round is the
+ * round cap. With one write per request (B7) a case needs one round; the cap is a backstop.
+ */
+export const MAX_APPROVAL_ROUNDS = 3;
 
 /** Spec §5's groups, in the table's order. */
 export const CASE_GROUPS = ["act", "answer", "decline", "manual", "injection", "reject"] as const;
@@ -146,9 +151,9 @@ export type BackOfficeResult = TracedResult & {
   steps: Record<string, number>;
   /** The answer's whole text, over every round, as the chat shows it. */
   reply: string;
-  /** Requests to the agent: the first, then one per round of answered cards. */
+  /** Requests to the agent: the first, then one per approval round (answered cards). */
   rounds: number;
-  /** A card still waited for the reviewer after the last round (spec §4.8). */
+  /** A card still waited for the reviewer after the last approval round (spec §4.8). */
   capped: boolean;
   reviews: Review[];
   gateDenials: GateDenial[];
@@ -157,6 +162,11 @@ export type BackOfficeResult = TracedResult & {
   notApplied: NotApplied[];
   /** The last round's finish reason. */
   finishReason: string | null;
+  /**
+   * The raw error of each failed step or tool, for the run's operator; absent when none failed.
+   * The model was sent the route's safe text instead (lib/agent/pipeline.ts).
+   */
+  errors?: string[];
   /** The conversation as the browser holds it: volatile, since approval ids are random. */
   messages: UIMessage[];
 };
@@ -466,11 +476,14 @@ function streamOf(chunks: readonly UIMessageChunk[]): ReadableStream<UIMessageCh
 /**
  * One request's answer, reduced onto the assistant message so far, as the browser reduces it
  * (useChat continues the last message); or why the run must stop, as the shell's
- * collectUIMessage says it (lib/eval/run.ts), which cannot continue a message.
+ * collectUIMessage says it (lib/eval/run.ts), which cannot continue a message. Listed for X-03
+ * (tests/x03-seams.test.ts): the shell's could take the message to continue.
  */
 async function continueAnswer(
   stream: ReadableStream<UIMessageChunk>,
   previous: UIMessage | undefined,
+  /** The raw errors seen so far: a failed answer is told by its own, not the stream's text. */
+  errors: readonly string[],
 ): Promise<
   | { message: UIMessage; finishReason: string | null; usage: TokenUsage | null }
   | { abortReason: string }
@@ -481,7 +494,7 @@ async function continueAnswer(
     chunks.push(read.value);
   }
   const failure = chunks.find((chunk) => chunk.type === "error");
-  if (failure) return { abortReason: `the answer failed: ${failure.errorText}` };
+  if (failure) return { abortReason: `the answer failed: ${errors.at(-1) ?? failure.errorText}` };
   if (chunks.some((chunk) => chunk.type === "abort")) {
     return { abortReason: "the answer was aborted" };
   }
@@ -553,18 +566,18 @@ function stepsOf(answer: UIMessage): Record<string, number> {
  * Runs one case once (spec §5): each round validates the conversation as the route does, runs
  * the shared pipeline, and continues the same assistant message; the scripted reviewer then
  * answers every card that waits, as useChat's addToolApprovalResponse sets it (ai
- * src/ui/chat.ts), and the next round sends it. It ends when no card waits, or after
- * `maxRounds` with one still waiting (capped). Before any request it checks that the request
- * texts are the frozen ones, and throws if not: nothing is spent on a case that cannot run.
- * Exported, with `maxRounds` and the set, for its test.
+ * src/ui/chat.ts), and the next request sends it. It ends when no card waits, or when a card
+ * waits after `maxApprovalRounds` approval rounds (capped). Before any request it checks that the
+ * request texts are the frozen ones, and throws if not: nothing is spent on a case that cannot
+ * run. Exported, with `maxApprovalRounds` and the set, for its test.
  */
 export async function runRequestCase(
   evalCase: BackOfficeCase,
   {
     model,
-    maxRounds = MAX_ROUNDS,
+    maxApprovalRounds = MAX_APPROVAL_ROUNDS,
     set = caseSet(),
-  }: { model: LanguageModel; maxRounds?: number; set?: BackOfficeCaseSet },
+  }: { model: LanguageModel; maxApprovalRounds?: number; set?: BackOfficeCaseSet },
 ): Promise<CaseOutcome<BackOfficeResult>> {
   assertFrozenRequests(set);
   const record = requestById(evalCase.request);
@@ -581,6 +594,8 @@ export async function runRequestCase(
   const usages: (TokenUsage | null)[] = [];
   const reviews: Review[] = [];
   let finishReason: string | null = null;
+  // The raw errors, which the stream replaces with the route's text (lib/agent/pipeline.ts).
+  const errors: string[] = [];
   let rounds = 0;
   let capped = false;
   for (;;) {
@@ -596,12 +611,14 @@ export async function runRequestCase(
       messages: validated.messages,
       requestId: evalCase.request,
       locale: "en",
-      // The script's operator reads the model's own error; no visitor sees it.
-      onError: (error) => (error instanceof Error ? error.message : String(error)),
+      // The model is sent the route's text for a failed call; the operator reads the raw one.
+      onError: (error) => {
+        errors.push(error instanceof Error ? error.message : String(error));
+      },
       // The request's tokens, as the trace reads them (template spec §5.10).
       messageMetadata: traceMetadataOnFinish(performance.now()),
     });
-    const round = await continueAnswer(stream, answer);
+    const round = await continueAnswer(stream, answer, errors);
     if ("abortReason" in round) return stop(round.abortReason);
     answer = { ...round.message, id: `${evalCase.id}-answer` };
     usages.push(round.usage);
@@ -609,7 +626,8 @@ export async function runRequestCase(
 
     const cards = answer.parts.filter(waitsForPerson);
     if (cards.length === 0) break;
-    if (rounds >= maxRounds) {
+    // Every request after the first sent one approval round's answers.
+    if (rounds - 1 >= maxApprovalRounds) {
       capped = true;
       break;
     }
@@ -656,6 +674,7 @@ export async function runRequestCase(
     },
     notApplied,
     finishReason,
+    ...(errors.length === 0 ? {} : { errors }),
     messages: conversation,
   };
   return { result: asWritten(result) };
@@ -701,9 +720,6 @@ function withRequests(text: Localized): Localized {
   ) as Localized;
 }
 
-/** How a case's page labels the note under the customer's message: recorded English text. */
-export const NOTE_LABEL = "Support's note: ";
-
 /**
  * P2's words and links on the Evals pages (template spec §5.12), from the project's dictionary
  * (evalText in lib/i18n/messages.ts) in every language: spec §5's headline, how a case is scored,
@@ -738,8 +754,11 @@ export const EVALS_PAGE: EvalsPage<BackOfficeResult, BackOfficeExtra> = {
             value: { kind: "count", n: data.rounds },
           },
         ],
+  // The customer's message, then Support's note under the request page's label, in the
+  // visitor's language; both texts are recorded English.
   exchange: ({ request, reply }) => ({
-    question: `${request.message}\n\n${NOTE_LABEL}${request.note}`,
+    question: request.message,
     answer: reply,
+    notes: [{ label: localized((t) => t.request.note), text: request.note }],
   }),
 };

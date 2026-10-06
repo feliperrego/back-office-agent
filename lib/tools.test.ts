@@ -270,6 +270,25 @@ describe("tool labels (spec §4.1, W-P22)", () => {
     expect(toolLabel(close, messages["pt-BR"])).toBe("Decisão da solicitação r06");
   });
 
+  // The review's m11: a decision that has not run (a card waiting, rejected, blocked) has no
+  // output; the page's request names it, as spec §4.1's "Request decision: r06".
+  it.each(STATES)(
+    "names a read and a decision with no output yet by the page's request (%s)",
+    (state) => {
+      for (const [name, en, pt] of [
+        ["readRequest", "Request lookup: r06", "Consulta da solicitação r06"],
+        ["closeRequest", "Request decision: r06", "Decisão da solicitação r06"],
+      ] as const) {
+        const view = { id: "c", name, input: { outcome: "declined" }, state };
+        expect(toolLabel(view, messages.en, "r06")).toBe(en);
+        expect(toolLabel(view, messages["pt-BR"], "r06")).toBe(pt);
+      }
+      // A write names its order, never the request.
+      const ret = { id: "c", name: "authorizeReturn", input: { orderId: "AO-10468" }, state };
+      expect(toolLabel(ret, messages.en, "r06")).toBe("Return authorization: AO-10468");
+    },
+  );
+
   // While the input streams, or before an output, the id may not be there yet.
   it.each([
     ["readRequest", {}, "Request lookup", "Consulta da solicitação"],

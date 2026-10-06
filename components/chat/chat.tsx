@@ -285,13 +285,16 @@ export function Chat<M extends UIMessage = UIMessage>({
   };
 
   // The person's answer to a card. useChat sends it on its own once every card of the step is
-  // answered, with these options, so the continuation carries the interface language too.
+  // answered, with these options, so the continuation carries the interface language too. The
+  // answered card unmounts with its focused button, so the focus moves to the composer, as after
+  // a send, and a screen reader keeps its place (P2's review, m8; X-03).
   const respond = ({ id, approved, reason }: ApprovalAnswer) => {
     if (!canRequest) return;
     setStoppedByUser(false);
     setInterrupted(false);
     scrollToBottom();
     void addToolApprovalResponse({ id, approved, reason, options: { body: { locale } } });
+    focusUnlessTouch(inputRef.current);
   };
 
   const handleStop = useCallback(() => {

@@ -11,7 +11,7 @@ import {
 } from "ai";
 import { MAX_OUTPUT_TOKENS, MAX_STEPS } from "@/lib/ai/limits";
 import { CHUNK_TIMEOUT_MS, FIRST_CHUNK_TIMEOUT_MS } from "@/lib/chat/config";
-import { toSafeErrorMessage } from "@/lib/chat/errors";
+import { SAFE_ERROR_MESSAGE, toSafeErrorMessage } from "@/lib/chat/errors";
 import { buildInstructions } from "@/lib/chat/instructions";
 import type { Locale } from "@/lib/i18n/locale";
 import { SandboxDenied } from "@/lib/sandbox/sandbox";
@@ -32,11 +32,11 @@ import { RequestSession } from "./session";
  * The SDK runs an approved call at the start of its continuation, before any model call, after
  * the gate decides again (ai stream-text.ts, validate-tool-approvals.ts).
  *
- * Parallel tool calls stay on: the installed Gateway docs pass provider options under the
- * provider's key (@ai-sdk/gateway docs, "Provider-Specific Options"), but no installed package
- * documents an option that turns them off, and the gate holds one write at a time either way
- * (tests/approval-round-trip.test.ts). The messages must already be validated and cleaned
- * (lib/chat/validate.ts, with TOOLS).
+ * Parallel tool calls are off for an OpenAI model (spec §4.2, P2-18; providerOptionsFor below);
+ * the gate still holds one write at a time whatever the model sends (tests/approval-round-trip.
+ * test.ts). A failed step or tool streams the route's one safe text, in the eval too, since the
+ * browser and the eval post it back on the continuation. The messages must already be validated
+ * and cleaned (lib/chat/validate.ts, with TOOLS).
  */
 export type AgentReplyOptions = {
   model: LanguageModel;
@@ -46,14 +46,48 @@ export type AgentReplyOptions = {
   locale?: Locale;
   abortSignal?: AbortSignal;
   /**
-   * The text a failed step or tool sends instead of its error. The route's hides the raw error
-   * (the default); the eval's keeps it for its operator. A write the sandbox refused at run time
-   * always says so: its text holds a code, never a provider's detail.
+   * Sees the raw error of a failed step or tool, such as the eval's record for its operator.
+   * Default: the route's server log (toSafeErrorMessage). Either way the stream carries
+   * SAFE_ERROR_MESSAGE instead of the error, so the model is sent the same history on the
+   * continuation in the route and the eval. A write the sandbox refused at run time always says
+   * so: its text holds a code, never a provider's detail.
    */
-  onError?: (error: unknown) => string;
+  onError?: (error: unknown) => void;
   /** Message metadata, such as the trace's tokens and latency for the eval (lib/trace/trace.ts). */
   messageMetadata?: (options: { part: TextStreamPart<ToolSet> }) => unknown;
 };
+
+/**
+ * What the pipeline asks of the provider besides the call: parallel tool calls off for an OpenAI
+ * model, named as the AI Gateway names it ("openai/…", P1's AI_MODEL). The Gateway passes options
+ * under the provider's own key (@ai-sdk/gateway docs, "Provider-Specific Options"), and the
+ * OpenAI provider documents `parallelToolCalls` (ai-sdk.dev, OpenAI provider options, Chat
+ * Completions and Responses alike). Other providers and the mock get none. Rollout step 5's real
+ * run checks that no step carried two tool calls (the result's `steps`).
+ */
+export function providerOptionsFor(
+  model: LanguageModel,
+): Parameters<typeof streamText>[0]["providerOptions"] {
+  const id = typeof model === "string" ? model : model.modelId;
+  return id.startsWith("openai/") ? { openai: { parallelToolCalls: false } } : undefined;
+}
+
+/**
+ * The stream's text for a failed step or tool: a sandbox code, or the route's safe text. The
+ * raw error goes to `observe` (default: the route's server log) once per text: the SDK streams an
+ * invalid input twice, as the input's error and then as the call's, the second time as the
+ * first's text (ai to-ui-message-chunk.ts, tool-input-error and tool-output-error).
+ */
+function errorTexts(observe: (error: unknown) => void): (error: unknown) => string {
+  const seen = new Set<string>();
+  return (error) => {
+    if (error instanceof SandboxDenied) return error.message;
+    const text = String(error);
+    if (!seen.has(text)) observe(error);
+    seen.add(text);
+    return SAFE_ERROR_MESSAGE;
+  };
+}
 
 export async function streamAgentReply({
   model,
@@ -61,13 +95,14 @@ export async function streamAgentReply({
   requestId,
   locale,
   abortSignal,
-  onError = toSafeErrorMessage,
+  onError,
   messageMetadata,
 }: AgentReplyOptions): Promise<{
   stream: ReadableStream<UIMessageChunk>;
   session: RequestSession;
 }> {
   const session = new RequestSession(requestId, messages);
+  const providerOptions = providerOptionsFor(model);
   const result = streamText({
     model,
     instructions: buildInstructions({ locale }),
@@ -81,6 +116,7 @@ export async function streamAgentReply({
     stopWhen: isStepCount(MAX_STEPS),
     maxOutputTokens: MAX_OUTPUT_TOKENS,
     reasoning: "none",
+    ...(providerOptions === undefined ? {} : { providerOptions }),
     abortSignal,
     timeout: { firstChunkMs: FIRST_CHUNK_TIMEOUT_MS, chunkMs: CHUNK_TIMEOUT_MS },
     // Suppresses streamText's own console.error(error) default: the error is already handled
@@ -90,7 +126,7 @@ export async function streamAgentReply({
   const stream = toUIMessageStream({
     stream: result.stream,
     tools: TOOLS,
-    onError: (error) => (error instanceof SandboxDenied ? error.message : onError(error)),
+    onError: errorTexts(onError ?? toSafeErrorMessage),
     sendReasoning: false,
     ...(messageMetadata === undefined ? {} : { messageMetadata }),
   });

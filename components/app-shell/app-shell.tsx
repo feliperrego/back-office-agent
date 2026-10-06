@@ -40,7 +40,8 @@ export type AppShellProps = SiteHeaderValues & {
   banner?: Localized;
   /**
    * One link inside the banner, placed where its sentence says {link} (P2's spec §1: P1's
-   * assistant, where some requests came from); a sentence without {link} shows no link.
+   * assistant, where some requests came from); a sentence without {link} shows no link. Listed
+   * for X-03 (tests/x03-seams.test.ts).
    */
   bannerLink?: { href: string; label: Localized };
   children: ReactNode;

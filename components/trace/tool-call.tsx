@@ -93,9 +93,10 @@ function StateIcon({ state }: { state: ToolState }) {
 /**
  * A tool chip (template spec §5.10): the call, named in the project's words (toolLabel), its
  * state, and on a click its input and output. data-tool and data-tool-state are what the e2e
- * reads.
+ * reads. A project's renderer may pass the label it computed with what it knows besides the call,
+ * such as P2's request id for a decision that has not run (P2's review, m11; X-03).
  */
-export function ToolCall({ view }: { view: ToolView }) {
+export function ToolCall({ view, label }: { view: ToolView; label?: string }) {
   const { t } = useLocale();
   const words = stateWords(view.state, t);
   return (
@@ -106,7 +107,7 @@ export function ToolCall({ view }: { view: ToolView }) {
     >
       <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 pointer-coarse:min-h-11">
         <StateIcon state={view.state} />
-        <span className="min-w-0 flex-1 wrap-anywhere">{toolLabel(view, t)}</span>
+        <span className="min-w-0 flex-1 wrap-anywhere">{label ?? toolLabel(view, t)}</span>
         {words !== null && (
           <span
             className={

@@ -26,7 +26,10 @@ function foldedSandbox(requestId: string, messages: UIMessage[]): Sandbox {
  * side by side from md up, stacked on a phone. The page folds the conversation once each time it
  * changes, into the sandbox the pane shows and the cards preview, so an approved change shows on
  * the order at once. On a phone the pane opens on the person's toggle, and closes again at the
- * first send of each conversation, so the conversation has the room.
+ * first send of each conversation, so the conversation has the room. On a screen shorter than
+ * 32rem (a phone in landscape) the page scrolls, and the agent panel is one screen tall, beside
+ * the pane from md up and under its toggle below md, so the conversation and a card keep their
+ * room (the review's m07).
  */
 export function RequestWorkspace({
   modelLabel,
@@ -59,14 +62,14 @@ export function RequestWorkspace({
   }, []);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+    <div className="flex min-h-0 flex-1 flex-col md:flex-row [@media(max-height:32rem)]:flex-none md:[@media(max-height:32rem)]:h-dvh">
       <RequestPane
         request={request}
         sandbox={sandbox}
         open={open}
         onToggle={() => setOpen((value) => !value)}
       />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col max-md:[@media(max-height:32rem)]:h-dvh max-md:[@media(max-height:32rem)]:flex-none">
         <AppChat
           modelLabel={modelLabel}
           isMock={isMock}

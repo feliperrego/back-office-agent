@@ -36,16 +36,22 @@ function Provenance({ card, t }: { card: BoardCard; t: Messages }) {
   );
 }
 
-/** A real run's verdict on the card's case, linked to its page; nothing on a mock run. */
+/**
+ * A real run's verdict on the card's case, linked to its page; nothing on a mock run. Its name
+ * starts with the verdict it shows, then says where it goes (WCAG 2.5.3, label in name).
+ */
 function Mark({ card, t }: { card: BoardCard; t: Messages }) {
   if (card.mark === null) return null;
   const { matched, expected, caseHref } = card.mark;
+  const verdict = matched
+    ? t.board.matched
+    : format(t.board.notMatched, { lane: t.lanes[expected] });
   return (
     <Link
       prefetch={false}
       href={caseHref}
       data-matched={matched}
-      aria-label={format(t.board.openCase, { id: card.id })}
+      aria-label={format(t.board.markLabel, { verdict, id: card.id })}
       className={cn(
         TARGET,
         "gap-1 font-medium underline-offset-4 hover:underline",
@@ -53,7 +59,7 @@ function Mark({ card, t }: { card: BoardCard; t: Messages }) {
       )}
     >
       {matched ? <CircleCheck className="size-3.5" /> : <CircleX className="size-3.5" />}
-      {matched ? t.board.matched : format(t.board.notMatched, { lane: t.lanes[expected] })}
+      {verdict}
     </Link>
   );
 }

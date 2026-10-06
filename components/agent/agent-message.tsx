@@ -26,6 +26,11 @@ type AgentMessageProps = {
   canRespond: boolean;
   /** The request's sandbox as the conversation leaves it: what a waiting write would change. */
   sandbox: Sandbox;
+  /**
+   * The mock model answers (Preview, CI): its text is English whatever the interface language,
+   * so it is marked lang="en"; the real model answers in the interface language (spec §4.6).
+   */
+  isMock: boolean;
 };
 
 /** A decided write's result line: who decided, or the policy gate's reason. */
@@ -61,6 +66,7 @@ function PendingCard({
   locale: Locale;
 }) {
   const { call } = item.card!;
+  const title = toolLabel(item.view, t, sandbox.request.id);
   const described = describeCall(call, sandbox);
   // The server's gate let it through, so the browser's agrees; if it ever did not, the card says
   // why, and the server decides again on the answer's continuation (spec §4.2).
@@ -79,7 +85,7 @@ function PendingCard({
   return (
     <ApprovalCard
       eyebrow={t.status.approvalNeeded}
-      title={toolLabel(item.view, t)}
+      title={title}
       rows={text.rows}
       lines={text.lines}
       note={text.note}
@@ -100,7 +106,8 @@ function PendingCard({
  * you", "Blocked by policy: …"); the caption last. It keeps the renderer contract (template spec
  * §5.8): data-message-role="assistant" on the root, the text as its first child div, even while
  * empty, and the caption last. Once the answer no longer streams, a call still running shows as
- * not finished, as the shell's chips do.
+ * not finished, as the shell's chips do. A read's and a decision's card and chip name the page's
+ * request before their output does (spec §4.1); the mock's English text is marked lang="en".
  */
 export function AgentMessage({
   message,
@@ -109,6 +116,7 @@ export function AgentMessage({
   respond,
   canRespond,
   sandbox,
+  isMock,
 }: AgentMessageProps) {
   const { locale, t } = useLocale();
   const items = callItems(message);
@@ -117,7 +125,9 @@ export function AgentMessage({
     : settledViews(items.map(({ view }) => view));
   return (
     <div data-message-role="assistant" className="flex flex-col gap-2">
-      <div className="whitespace-pre-wrap wrap-anywhere">{messageText(message)}</div>
+      <div lang={isMock ? "en" : undefined} className="whitespace-pre-wrap wrap-anywhere">
+        {messageText(message)}
+      </div>
       {items.length > 0 && (
         <ul className="flex flex-col gap-1.5">
           {items.map((item, index) => {
@@ -138,7 +148,7 @@ export function AgentMessage({
                   </div>
                 ) : (
                   <>
-                    <ToolCall view={view} />
+                    <ToolCall view={view} label={toolLabel(view, t, sandbox.request.id)} />
                     {item.outcome !== null && (
                       <p
                         data-approval-result={item.outcome.kind}

@@ -2,7 +2,7 @@
 
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Play } from "lucide-react";
-import { useCallback, useMemo, type ReactNode } from "react";
+import { useCallback, useId, useMemo, type ReactNode } from "react";
 import { AgentMessage } from "@/components/agent/agent-message";
 import { Chat, type ChatHeaderActions } from "@/components/chat/chat";
 import type { AssistantRenderer } from "@/components/chat/message-list";
@@ -25,15 +25,25 @@ type AppChatProps = {
 };
 
 /**
- * The agent panel's bar (P2's spec §1 item 2, §4.5): its name, "Handle this request", which sends
- * the person's message as a prompt does and waits while a card does, and New chat. Always shown,
- * on a phone too, above the conversation.
+ * The agent panel's bar (P2's spec §1 item 2, §4.5): its name, which names the panel's region,
+ * "Handle this request", which sends the person's message as a prompt does and waits while a card
+ * does, and New chat. Always shown, on a phone too, above the conversation.
  */
-function AgentBar({ newChat, chat }: { newChat: ReactNode; chat: ChatHeaderActions }) {
+function AgentBar({
+  headingId,
+  newChat,
+  chat,
+}: {
+  headingId: string;
+  newChat: ReactNode;
+  chat: ChatHeaderActions;
+}) {
   const { t } = useLocale();
   return (
     <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2">
-      <h2 className="font-medium max-sm:sr-only">{t.request.agent}</h2>
+      <h2 id={headingId} className="font-medium max-sm:sr-only">
+        {t.request.agent}
+      </h2>
       <div className="flex flex-1 items-center justify-end gap-2">
         <Button
           className="pointer-coarse:h-11"
@@ -57,7 +67,10 @@ function AgentBar({ newChat, chat }: { newChat: ReactNode; chat: ChatHeaderActio
  * so a conversation never mixes two requests; the sandbox lives in this conversation only, in
  * memory (spec §2). P2's renderer shows the text, then the chips and the approval card
  * (AgentMessage), and counts a call as content; while a card waits the composer says to answer
- * it.
+ * it. The panel is a region named by its bar's heading, so landmark navigation reaches the bar,
+ * the conversation (Chat's <main>) and the composer, next to the request's <aside> (the review's
+ * m09). A <div> with the role, not a <section>: a <main> must have only <div> ancestors (HTML,
+ * "hierarchically correct main element").
  */
 export function AppChat({
   modelLabel,
@@ -69,6 +82,7 @@ export function AppChat({
   onMessagesChange,
 }: AppChatProps) {
   const { t, locale } = useLocale();
+  const headingId = useId();
   // useChat sends with the latest transport it is given (@ai-sdk/react 4.0.117, useChat's
   // latestRef), so a language switch reaches the next request, a continuation included.
   const transport = useMemo(
@@ -76,24 +90,28 @@ export function AppChat({
     [requestId, locale],
   );
   const renderAssistant = useCallback<AssistantRenderer<UIMessage>>(
-    (message, options) => <AgentMessage message={message} {...options} sandbox={sandbox} />,
-    [sandbox],
+    (message, options) => (
+      <AgentMessage message={message} {...options} sandbox={sandbox} isMock={isMock} />
+    ),
+    [sandbox, isMock],
   );
 
   return (
-    <Chat
-      key={requestId}
-      modelLabel={modelLabel}
-      isMock={isMock}
-      commit={commit}
-      rateLimitPerHour={rateLimitPerHour}
-      transport={transport}
-      renderAssistant={renderAssistant}
-      hasContent={hasTextOrTools}
-      approvalNotice={t.approval.notice}
-      onMessagesChange={onMessagesChange}
-      header={(newChat, chat) => <AgentBar newChat={newChat} chat={chat} />}
-      empty={{ title: t.empty.title, intro: t.empty.subtitle, groups: [{ prompts: t.prompts }] }}
-    />
+    <div role="region" aria-labelledby={headingId} className="flex min-h-0 flex-1 flex-col">
+      <Chat
+        key={requestId}
+        modelLabel={modelLabel}
+        isMock={isMock}
+        commit={commit}
+        rateLimitPerHour={rateLimitPerHour}
+        transport={transport}
+        renderAssistant={renderAssistant}
+        hasContent={hasTextOrTools}
+        approvalNotice={t.approval.notice}
+        onMessagesChange={onMessagesChange}
+        header={(newChat, chat) => <AgentBar headingId={headingId} newChat={newChat} chat={chat} />}
+        empty={{ title: t.empty.title, intro: t.empty.subtitle, groups: [{ prompts: t.prompts }] }}
+      />
+    </div>
   );
 }

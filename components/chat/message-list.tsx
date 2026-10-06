@@ -22,6 +22,7 @@ export type AssistantRenderOptions = {
   /**
    * Answers a card, a tool call waiting for the person's approval (P2's spec §4.5): useChat's
    * addToolApprovalResponse, which continues the answer once every card of its step is answered.
+   * With canRespond and ApprovalAnswer, a seam listed for X-03 (tests/x03-seams.test.ts).
    */
   respond: (answer: ApprovalAnswer) => void;
   /** Whether an answer would go now: the chat is idle. A card's buttons wait while it is not. */

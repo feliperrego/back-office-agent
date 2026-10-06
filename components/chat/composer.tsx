@@ -13,7 +13,7 @@ type ComposerProps = {
   /**
    * Why the composer takes no text now, shown above it, or null when it takes text: the message
    * cap's notice, or the project's line while a card waits for the person's answer (P2's spec
-   * §4.5).
+   * §4.5; listed for X-03, tests/x03-seams.test.ts).
    */
   readOnlyNotice: string | null;
   /** True while an IME composition is open on the page; Chat tracks it. */

@@ -175,8 +175,17 @@ test("a case's page shows its question, its answer and its trace: the checks, th
   await expectEvalsCurrentOnCase(shellNav(page), data.id);
 
   if (data.exchange !== null) {
+    // The recorded texts, in order: the question, each text it came with, the answer; each such
+    // text under its label, which is interface text, not recorded English.
+    const notes = data.exchange.notes ?? [];
     const recorded = page.getByTestId("exchange").locator('p[lang="en"]');
-    await expect(recorded).toHaveText([data.exchange.question, data.exchange.answer]);
+    await expect(recorded).toHaveText([
+      data.exchange.question,
+      ...notes.map(({ text }) => text),
+      data.exchange.answer,
+    ]);
+    const labels = page.getByTestId("exchange-note-label");
+    await expect(labels).toHaveText(notes.map(({ label }) => label.en));
   }
 
   const trace = page.getByTestId("trace");
@@ -263,6 +272,10 @@ test("in Portuguese the Evals pages show no English interface text", async ({ pa
   await page.goto(`${hrefOf(data.id)}?lang=pt-BR`);
   await expectPortuguese(page);
   await expect(page.getByRole("heading", { level: 2, name: `Caso ${data.id}` })).toBeVisible();
+  // A label of a text the question came with is in the visitor's language (P2's review, m13).
+  await expect(page.getByTestId("exchange-note-label")).toHaveText(
+    (data.exchange?.notes ?? []).map(({ label }) => label["pt-BR"]),
+  );
   await expectNoEnglish(page);
 });
 

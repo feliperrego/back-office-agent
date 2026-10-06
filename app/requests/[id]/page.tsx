@@ -29,7 +29,11 @@ export async function generateMetadata({ params }: PageProps<"/requests/[id]">):
  * with the way back to the Board, then the request pane and the agent panel, then the footer. The
  * chat e2e opens /requests/r01 as CHAT_PATH (spec §4.7). A server component: the header's values
  * and lib/rate-limit.ts are server-only, so they reach the client panel as props, with the
- * request's record and its customer's name; never the store's `about` text.
+ * request's record and its customer's name; never the store's `about` text. The page is one
+ * screen tall, the workspace filling what the header and the footer leave; on a screen shorter
+ * than 32rem, a phone in landscape, that leaves the conversation a strip, so the page scrolls
+ * instead and the workspace keeps a screen's height of its own (RequestWorkspace; the review's
+ * m07).
  */
 export default async function RequestPage({ params }: PageProps<"/requests/[id]">) {
   const { id } = await params;
@@ -38,7 +42,7 @@ export default async function RequestPage({ params }: PageProps<"/requests/[id]"
   if (customer === undefined) throw new Error(`Unknown customer: ${record.customerId}`);
   const header = siteHeaderProps();
   return (
-    <div className="flex h-dvh flex-col">
+    <div className="flex h-dvh flex-col [@media(max-height:32rem)]:h-auto [@media(max-height:32rem)]:min-h-dvh">
       <SiteHeader {...header} actions={<BoardLink />} />
       <RequestWorkspace
         {...header}

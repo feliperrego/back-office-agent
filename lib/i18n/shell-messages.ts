@@ -32,7 +32,8 @@ export type ShellMessages = {
   errors: { generic: string; limit: string };
   /**
    * The screen-reader status line once a request is over; approvalNeeded while a card waits for
-   * the person's answer (P2's spec §4.5).
+   * the person's answer (P2's spec §4.5; the one shell string P2 adds, listed for X-03,
+   * tests/x03-seams.test.ts).
    */
   status: { complete: string; stopped: string; failed: string; approvalNeeded: string };
   footer: { builtBy: string; source: string };

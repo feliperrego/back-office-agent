@@ -65,8 +65,19 @@ export type EvalsPage<Result extends TracedResult, Extra = unknown> = {
   caseHref(id: string): string;
   /** The project's own numbers about a real run, after the shell's; a mock run shows none. */
   supporting?(run: EvalRun<Result, Extra>): SupportingRow[];
-  /** A chat case's question and its recorded answer, shown above the trace. */
-  exchange?(result: Result): { question: string; answer: string };
+  /**
+   * A chat case's question and its recorded answer, shown above the trace, and any text the
+   * question came with, such as P2's Support's note: each under its label in the visitor's
+   * language, the text recorded English like the question (P2's review, m13; X-03).
+   */
+  exchange?(result: Result): Exchange;
+};
+
+/** A case's question, its answer, and the labelled texts that came with the question. */
+export type Exchange = {
+  question: string;
+  answer: string;
+  notes?: { label: Localized; text: string }[];
 };
 
 type Shown<Result extends TracedResult, Extra> = { file: string; run: EvalRun<Result, Extra> };
@@ -184,7 +195,7 @@ export type CaseViewData = {
   /** Each check's label, by its id. */
   checkLabels: Record<string, Localized>;
   toolCalls: ToolView[];
-  exchange: { question: string; answer: string } | null;
+  exchange: Exchange | null;
   /** The answer's tokens and latency; null for a mock run, which measures neither. */
   measured: { usage: TokenUsage | null; latencyMs: number } | null;
   evalsHref: string;

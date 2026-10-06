@@ -121,6 +121,14 @@ describe("Chat's approval seams", () => {
     expect(source).toMatch(/onClick=\{retryFailed\}/);
   });
 
+  // The review's m08: the answered card unmounts with the focused button, so the focus moves to
+  // the composer, as after a send (except on touch, where it would open the keyboard).
+  it("keep the focus after an answer: it moves to the composer", () => {
+    expect(source).toMatch(
+      /void addToolApprovalResponse\(.*\);\s*focusUnlessTouch\(inputRef\.current\);/,
+    );
+  });
+
   it("make the composer read-only, with the project's line, while a card waits", () => {
     expect(source).toMatch(/atCap \? t\.composer\.capNotice : awaiting \? approvalNotice : null/);
   });

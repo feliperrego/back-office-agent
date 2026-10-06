@@ -69,7 +69,8 @@ export type ProjectMessages = {
     forDemo: string;
     matched: string;
     notMatched: string;
-    openCase: string;
+    /** The mark's accessible name: its visible verdict first, then where it goes. */
+    markLabel: string;
   };
   /** A request's page (P2's spec §1 item 2). */
   request: {
@@ -256,7 +257,7 @@ export const projectMessages: Record<Locale, ProjectMessages> = {
       forDemo: "Written for this demo",
       matched: "Matched",
       notMatched: "Not matched · expected {lane}",
-      openCase: "Open case {id}",
+      markLabel: "{verdict} · open case {id}",
     },
     request: {
       title: "Request {id}",
@@ -447,7 +448,7 @@ export const projectMessages: Record<Locale, ProjectMessages> = {
       forDemo: "Escrita para esta demo",
       matched: "Confere",
       notMatched: "Não confere · esperado: {lane}",
-      openCase: "Abrir o caso {id}",
+      markLabel: "{verdict} · abrir o caso {id}",
     },
     request: {
       title: "Solicitação {id}",
@@ -555,12 +556,16 @@ export const messages: Record<Locale, Messages> = {
  * of its tools (lib/tools.ts) here, from its own keys, and keeps this export, which the shell's
  * chips read. A tool it does not name gets the shell's "Tool: {name}". The input may still be
  * streaming, so a field it reads may be missing or empty: the label then leaves it out.
+ * `requestId` is the page's request (P2's renderer passes it): a read or a decision that has not
+ * run yet has no output to name it, so the card and the chip name it from the page (spec §4.1,
+ * "Request decision: r06"; the review's m11). Neither tool takes a request id as input (P2-19).
  */
-export function toolLabel(view: ToolView, t: Messages): string {
+export function toolLabel(view: ToolView, t: Messages, requestId?: string): string {
   const labels = t.toolLabels;
+  const request = () => requestIdIn(view) || (requestId?.trim() ?? "");
   switch (view.name) {
     case "readRequest":
-      return withField(labels.readRequest, labels.readRequestWithId, { id: requestIdIn(view) });
+      return withField(labels.readRequest, labels.readRequestWithId, { id: request() });
     case "authorizeReturn":
       return withField(labels.authorizeReturn, labels.authorizeReturnWithOrder, {
         order: orderIdIn(view),
@@ -568,7 +573,7 @@ export function toolLabel(view: ToolView, t: Messages): string {
     case "changeItem":
       return withField(labels.changeItem, labels.changeItemWithOrder, { order: orderIdIn(view) });
     case "closeRequest":
-      return withField(labels.closeRequest, labels.closeRequestWithId, { id: requestIdIn(view) });
+      return withField(labels.closeRequest, labels.closeRequestWithId, { id: request() });
     default:
       return format(t.toolCall.generic, { name: view.name });
   }
