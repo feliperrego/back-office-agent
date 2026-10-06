@@ -1,6 +1,6 @@
 # P2: Back-office agent with approval — design
 
-- **Status:** draft for Felipe. Nothing here is approved; §10 gathers every proposal for one answer ("todas ok exceto P2-xx").
+- **Status:** approved by Felipe on 2026-10-06 ("todas ok"): P2-01 to P2-29 of §10. The `[P]` tags stay as a record; later documents cite these items as `[D: P2-nn]`.
 - **What it carries out:** P2 of `portfolio/ROADMAP.md`: "a back office in the style of reference 8: requests, a kanban and an agent panel that acts only after approval", with 3–4 tools, an approve/reject card, and "share of 20–25 frozen requests that end in the expected sandbox state" [D: Q1, S2, ROADMAP line 38]; one fictional world, "P2 executes, after approval, what P1 hands to a human" [D: Q4]; the cuts "a fixed kanban and inbox; the sandbox state lives in the browser, so no Upstash and no signed approvals; the audit log is the list of the conversation's tool calls" [D: S9]; light process: this short spec, build, one review [D: S1].
 - **Starts from:** the template at `89d3cca` (its code equals `75c443f`, X-02) [F], and P1's store (customers, orders, help center) copied at `f56063b` [D: X2-05].
 - **Reference 8:** Plane's AI panel on its kanban, where nothing changes until you confirm (docs.plane.so/ai/plane-ai) [P: inferred; ROADMAP line 24 does not list references 7–9].
