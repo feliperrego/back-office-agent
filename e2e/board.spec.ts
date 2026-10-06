@@ -137,6 +137,73 @@ test("in Portuguese the Board shows no English interface text", async ({ page })
   await expectNoEnglish(page);
 });
 
+/**
+ * Each card's problems at this size: its link to the request narrower than the customer's name
+ * on one line (the name would stack a letter per line), or a descendant that reaches past the
+ * card's edges. Empty when the card lays out well.
+ */
+async function cardLayoutProblems(page: Page): Promise<string[]> {
+  return page.locator("[data-request]").evaluateAll((cards) =>
+    cards.flatMap((card) => {
+      const id = card.getAttribute("data-request");
+      const problems: string[] = [];
+      const box = card.getBoundingClientRect();
+      const link = card.querySelector<HTMLElement>(`a[href="/requests/${id}"]`);
+      const name = link?.lastElementChild as HTMLElement | null | undefined;
+      if (!link || !name) return [`${id}: no link with the customer's name`];
+      // The name's width on one line, in the link's own font.
+      const probe = name.cloneNode(true) as HTMLElement;
+      Object.assign(probe.style, {
+        position: "absolute",
+        visibility: "hidden",
+        whiteSpace: "nowrap",
+      });
+      link.appendChild(probe);
+      const natural = probe.getBoundingClientRect().width;
+      probe.remove();
+      const shown = name.getBoundingClientRect().width;
+      if (shown + 0.5 < natural) {
+        problems.push(
+          `${id}: the name is ${Math.round(shown)} px wide, needs ${Math.round(natural)}`,
+        );
+      }
+      for (const element of card.querySelectorAll<HTMLElement>("*")) {
+        const each = element.getBoundingClientRect();
+        if (each.width === 0) continue;
+        if (each.right > box.right + 0.5 || each.left < box.left - 0.5) {
+          problems.push(`${id}: a ${element.tagName.toLowerCase()} reaches past the card`);
+        }
+      }
+      return problems;
+    }),
+  );
+}
+
+// The Board on the laptop and tablet widths where its lanes sit side by side: every card keeps
+// its customer's name on one line and nothing reaches past it, in both languages, and the page
+// never scrolls sideways.
+for (const width of [768, 1024, 1280, 1440, 1536]) {
+  test(`at ${width} px every card keeps its name on one line and its content inside`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    for (const path of ["/", "/?lang=pt-BR"]) {
+      await page.goto(path);
+      await waitForHydration(page);
+      await expect(page.locator("[data-request]")).toHaveCount(19);
+      expect(await cardLayoutProblems(page), path).toEqual([]);
+      await expectNoSidewaysScroll(page);
+      const main = await page.locator("main").evaluate((element) => ({
+        scroll: element.scrollWidth,
+        client: element.clientWidth,
+      }));
+      expect(main.scroll, `${path}: the main column scrolls sideways`).toBeLessThanOrEqual(
+        main.client,
+      );
+    }
+  });
+}
+
 test.describe("a phone at 375×812 with touch", () => {
   test.use({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true });
 

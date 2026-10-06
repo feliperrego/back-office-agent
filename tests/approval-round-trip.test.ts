@@ -8,11 +8,14 @@ import {
 import { MockLanguageModelV4 } from "ai/test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/chat/route";
+import { RequestSession } from "@/lib/agent/session";
 import { createScenarioMockModel, type MockStreamPart } from "@/lib/ai/mock";
 import { resetMockScenarios } from "@/lib/ai/mock-steps";
+import { validateAndClean } from "@/lib/chat/validate";
 import { fold } from "@/lib/sandbox/fold";
 import { openSandbox, orderOf, type Sandbox } from "@/lib/sandbox/sandbox";
 import { storeData } from "@/lib/store/customers";
+import { TOOLS } from "@/lib/tools";
 import { parseSse, type SseChunk } from "./helpers/sse";
 
 // The approval round trip of spec §4.2 and §6, through the chat route with the mock model, the
@@ -210,6 +213,60 @@ describe("reject", () => {
 
     expect(partOf(message, "authorizeReturn").state).toBe("output-denied");
     const sandbox = sandboxAfter("r01", [question, message]);
+    expect(sandbox.customers).toEqual(storeData.customers);
+    expect(sandbox.request.status).toBe("open");
+    expect(sandbox.rejected).toBe(true);
+  });
+});
+
+// A rejection whose continuation never came: after Reject, a Stop, an Esc or a failed
+// continuation (a 429, a lost connection) leaves the part approval-responded in the browser, and
+// the visitor can still type or press "Handle this request". The server must keep that rejection
+// as the browser's fold keeps it, so the gate still denies every later write (spec §3 B7).
+describe("a rejection whose continuation never came", () => {
+  it("still blocks every later write when the visitor sends a new message", async () => {
+    h.model = createScenarioMockModel(FAST);
+    const { question, card, callId } = await proposeR01();
+    const reason = "The customer called back to keep it.";
+    const rejected = decide(card, false, reason);
+    const again: UIMessage = { ...user(HANDLE), id: "u-again" };
+    const history = [question, rejected, again];
+
+    // The browser's fold and the server's fold of the history it acts on agree.
+    expect(fold(openSandbox("r01"), history).sandbox.rejected).toBe(true);
+    const validated = await validateAndClean({ messages: history }, TOOLS);
+    if (!validated.ok) throw new Error(validated.text);
+    expect(new RequestSession("r01", validated.messages).sandbox.rejected).toBe(true);
+    // The rejection reaches the server as the denial the continuation would have left.
+    expect(partOf(validated.messages[1], "authorizeReturn")).toMatchObject({
+      toolCallId: callId,
+      state: "output-denied",
+      approval: { approved: false, reason },
+    });
+
+    const callsBefore = h.model.doStreamCalls.length;
+    const { chunks, message } = await answerOf(await post(history));
+
+    // The model saw the rejected call with its result, so no call is left without one.
+    const prompt = h.model.doStreamCalls[callsBefore].prompt;
+    const results = prompt.flatMap((each) =>
+      each.role === "tool" ? each.content.filter(({ type }) => type === "tool-result") : [],
+    );
+    expect(results).toContainEqual(expect.objectContaining({ toolCallId: callId }));
+    // The same write proposed again never reaches a person's card: the gate denies it.
+    const write = partOf(message, "authorizeReturn");
+    expect(write.toolCallId).not.toBe(callId);
+    expect(write).toMatchObject({
+      state: "output-denied",
+      approval: { isAutomatic: true, approved: false, reason: "after-rejection" },
+    });
+    expect(chunksOf(chunks, "tool-approval-request").filter((c) => c.isAutomatic !== true)).toEqual(
+      [],
+    );
+    expect(chunksOf(chunks, "tool-output-available").map(({ toolCallId }) => toolCallId)).toEqual([
+      partOf(message, "readRequest").toolCallId,
+    ]);
+    const sandbox = sandboxAfter("r01", [...history, message]);
     expect(sandbox.customers).toEqual(storeData.customers);
     expect(sandbox.request.status).toBe("open");
     expect(sandbox.rejected).toBe(true);

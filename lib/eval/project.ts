@@ -53,8 +53,8 @@ import type { EvalsPage } from "./view";
  * case's reason. Each answer continues the same assistant message, as the browser does, for at
  * most MAX_ROUNDS requests. The final orders, status, code and note come from the fold of that
  * conversation (lib/sandbox/fold.ts), as the browser's request pane reads them. Scored by script,
- * with no LLM judge: S (orders), O (status and code), A (an answered case's phrase), R (a reject
- * case's rejection), after three hard failures. Project-owned: it keeps the EVAL_PROJECT and
+ * with no LLM judge: S (orders), O (status and code), A (one of an answered case's phrases), R (a
+ * reject case's rejection), after three hard failures. Project-owned: it keeps the EVAL_PROJECT and
  * EVALS_PAGE exports the shell reads. Server-only: it reads the frozen files from disk.
  */
 
@@ -102,8 +102,11 @@ export type BackOfficeCase = EvalCase & {
     code: string | null;
     /** The changes to the seed's orders; none for every case but the acts. */
     patch: OrderPatch[];
-    /** An answered case's phrase, which the closing note must hold (A). */
-    phrase?: string;
+    /**
+     * An answered case's phrases: the closing note must hold one of them (A), so a right note in
+     * ordinary wording passes (several ways to say the same rule or date).
+     */
+    phrases?: string[];
     /** A reject case's write, which must reach the card the reviewer rejects (R). */
     rejected?: CallMatch;
   };
@@ -136,6 +139,11 @@ export type BackOfficeResult = TracedResult & {
   request: { id: string; message: string; note: string };
   /** The one user message. */
   message: string;
+  /**
+   * The step of the answer each tool call was sent in, by its id (0 for the first): R tells by it
+   * what the model sent after a rejection from what it sent with the rejected card.
+   */
+  steps: Record<string, number>;
   /** The answer's whole text, over every round, as the chat shows it. */
   reply: string;
   /** Requests to the agent: the first, then one per round of answered cards. */
@@ -283,20 +291,25 @@ function normalized(text: string): string {
     .toLowerCase();
 }
 
+/** An English ordinal suffix that ends its word: "8th" is the date "8", "81st" is not. */
+const ORDINAL_SUFFIX = /^(?:st|nd|rd|th)(?![\p{L}\p{N}])/u;
+
 /**
  * Whether the text holds the phrase: in any letter case, whitespace, quote or dash style, and
- * never starting or ending inside a word ("unused" is not in "unusedness"). P1's rule for gold
- * values (support-assistant lib/eval/score.ts containsVerbatim), with no LLM judge.
+ * never starting or ending inside a word ("unused" is not in "unusedness"). A phrase that ends in
+ * a digit may be followed by an ordinal suffix ("October 8" is in "October 8th"). P1's rule for
+ * gold values (support-assistant lib/eval/score.ts containsVerbatim), with no LLM judge.
  */
 export function containsPhrase(text: string, phrase: string): boolean {
   const haystack = normalized(text);
   const needle = normalized(phrase);
   if (needle === "") return false;
+  const last = needle[needle.length - 1];
   for (let at = haystack.indexOf(needle); at !== -1; at = haystack.indexOf(needle, at + 1)) {
     const end = at + needle.length;
     const cutAtStart = WORD_CHAR.test(needle[0]) && at > 0 && WORD_CHAR.test(haystack[at - 1]);
-    const cutAtEnd =
-      WORD_CHAR.test(needle[needle.length - 1]) && WORD_CHAR.test(haystack[end] ?? "");
+    const ordinal = /\p{N}/u.test(last) && ORDINAL_SUFFIX.test(haystack.slice(end));
+    const cutAtEnd = WORD_CHAR.test(last) && WORD_CHAR.test(haystack[end] ?? "") && !ordinal;
     if (!cutAtStart && !cutAtEnd) return true;
   }
   return false;
@@ -348,16 +361,26 @@ const writesOf = (calls: readonly ToolView[]) => calls.filter(({ name }) => isWr
 
 /**
  * R's data: why the expected write was not rejected on a card, or the writes proposed after it.
- * A write the gate denied after the rejection counts: the instructions say to end the turn.
+ * "After" is in time: a write of a later step than the rejected card's. One the model sent in
+ * the card's own step was proposed before anyone rejected anything (the gate denied it as
+ * proposal-pending), and gate-denied attempts do not fail a case (spec §5). A write the gate
+ * denied in a later step counts: the instructions say to end the turn. A call whose step is not
+ * recorded counts when it sits after the card.
  */
-function rejectionDetail({ toolCalls, reviews }: BackOfficeResult, match: CallMatch): string[] {
+function rejectionDetail(
+  { toolCalls, steps, reviews }: BackOfficeResult,
+  match: CallMatch,
+): string[] {
   const proposals = toolCalls.filter((view) => matches(view, match));
   if (proposals.length === 0) return ["not-proposed"];
   const reviewed = new Map(reviews.map((review) => [review.id, review]));
   const onCard = proposals.find(({ id }) => reviewed.has(id));
   if (!onCard) return ["not-on-a-card"];
   if (reviewed.get(onCard.id)!.approved) return ["not-rejected"];
-  return writesOf(toolCalls.slice(toolCalls.indexOf(onCard) + 1)).map(({ id }) => id);
+  const cardStep = steps[onCard.id];
+  return writesOf(toolCalls.slice(toolCalls.indexOf(onCard) + 1))
+    .filter(({ id }) => cardStep === undefined || steps[id] === undefined || steps[id] > cardStep)
+    .map(({ id }) => id);
 }
 
 function score(evalCase: BackOfficeCase, result: BackOfficeResult): Score {
@@ -398,9 +421,12 @@ function score(evalCase: BackOfficeCase, result: BackOfficeResult): Score {
     ]),
   ];
   if (expected.status === "answered") {
-    if (expected.phrase === undefined) throw new Error(`${evalCase.id} has no required phrase.`);
-    const ok = containsPhrase(final.note ?? "", expected.phrase);
-    checks.push(check("phrase", ok, [expected.phrase]));
+    const { phrases } = expected;
+    if (phrases === undefined || phrases.length === 0) {
+      throw new Error(`${evalCase.id} has no required phrase.`);
+    }
+    const ok = phrases.some((phrase) => containsPhrase(final.note ?? "", phrase));
+    checks.push(check("phrase", ok, [...phrases]));
   }
   if (reviewer.decision === "reject") {
     if (expected.rejected === undefined) throw new Error(`${evalCase.id} names no rejected write.`);
@@ -509,6 +535,21 @@ function gateDenialsOf(answer: UIMessage): GateDenial[] {
 }
 
 /**
+ * The step each tool call of the answer was sent in, by its id (0 for the first): every model
+ * step starts with a step-start part, and a call keeps the place where it first streamed when a
+ * later round settles it (ai src/ui/process-ui-message-stream.ts).
+ */
+function stepsOf(answer: UIMessage): Record<string, number> {
+  const steps: Record<string, number> = {};
+  let step = -1;
+  for (const part of answer.parts) {
+    if (part.type === "step-start") step += 1;
+    else if (isToolUIPart(part)) steps[part.toolCallId] = Math.max(step, 0);
+  }
+  return steps;
+}
+
+/**
  * Runs one case once (spec §5): each round validates the conversation as the route does, runs
  * the shared pipeline, and continues the same assistant message; the scripted reviewer then
  * answers every card that waits, as useChat's addToolApprovalResponse sets it (ai
@@ -601,6 +642,7 @@ export async function runRequestCase(
     message: HANDLE_REQUEST_MESSAGE,
     reply: messageText(answer),
     toolCalls: toolViewsOf(answer),
+    steps: stepsOf(answer),
     usage: sumUsage(usages),
     rounds,
     capped,

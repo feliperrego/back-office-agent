@@ -64,17 +64,22 @@ function Card({ card, t }: { card: BoardCard; t: Messages }) {
       data-request={card.id}
       className="flex min-w-0 flex-col gap-1.5 rounded-lg border bg-card p-3 text-sm shadow-xs"
     >
-      <div className="flex items-start justify-between gap-2">
+      {/* The link keeps its name on one line (it never shrinks, up to the card's width); the
+          reason chip moves under it when both do not fit, and wraps its own words if it must. */}
+      <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
         <Link
           prefetch={false}
           href={card.href}
           aria-label={format(t.board.openRequest, { id: card.id, customer: card.customer })}
-          className={cn(TARGET, "min-w-0 gap-2 font-medium underline-offset-4 hover:underline")}
+          className={cn(
+            TARGET,
+            "max-w-full shrink-0 gap-2 font-medium underline-offset-4 hover:underline",
+          )}
         >
           <span className="font-mono text-xs text-muted-foreground">{card.id}</span>
           <span className="wrap-anywhere">{card.customer}</span>
         </Link>
-        <span className="shrink-0 rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
+        <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
           {t.reasons[card.reason]}
         </span>
       </div>

@@ -153,16 +153,25 @@ describe("the frozen cases (spec §5)", () => {
     });
   });
 
-  it("give a required phrase to each answered case and no other, one its request's text never holds", () => {
+  // Any one phrase of a case's list is enough, so a right note in ordinary wording passes; none
+  // is in its request's text, so a note that copies the request does not.
+  it("give required phrases to each answered case and no other, none its request's text holds", () => {
     const phrases = cases.flatMap(({ id, expected }) =>
-      expected.phrase === undefined ? [] : [[id, expected.phrase] as const],
+      expected.phrases === undefined ? [] : [[id, expected.phrases] as const],
     );
+    expect(Object.fromEntries(phrases)).toEqual({
+      r04: ["unused", "unworn"],
+      r05: ["ships", "hasn't shipped", "has not shipped", "it has shipped", "order has shipped"],
+      r19: ["October 8", "Oct 8", "Oct. 8"],
+    });
     expect(phrases.map(([id]) => id)).toEqual(
       cases.filter(({ expected }) => expected.status === "answered").map(({ id }) => id),
     );
-    for (const [id, phrase] of phrases) {
+    for (const [id, list] of phrases) {
       const { message, note } = requestById(caseOf(id).request);
-      expect(containsPhrase(`${message} ${note}`, phrase), id).toBe(false);
+      for (const phrase of list) {
+        expect(containsPhrase(`${message} ${note}`, phrase), `${id}: ${phrase}`).toBe(false);
+      }
     }
   });
 
@@ -263,6 +272,11 @@ describe("containsPhrase", () => {
     ["It arrives on October 8, 2026.", "October 8", true],
     ["It can’t go back.", "can't go back", true],
     ["It arrives on October 18.", "October 8", false],
+    // A date's ordinal suffix does not cut it; another digit does.
+    ["It should arrive Thursday, October 8th.", "October 8", true],
+    ["Due on the 2nd, then the 3rd.", "the 3", true],
+    ["It arrives on October 81st.", "October 8", false],
+    ["It arrives on October 8the.", "October 8", false],
     ["Its unusedness.", "unused", false],
     ["Nothing here.", "unused", false],
   ])("finds in %j the phrase %j: %s", (text, phrase, found) => {
@@ -288,6 +302,7 @@ function result(overrides: Partial<BackOfficeResult> = {}): BackOfficeResult {
     message: HANDLE_REQUEST_MESSAGE,
     reply: "Done.",
     toolCalls: [READ],
+    steps: {},
     usage: null,
     rounds: 2,
     capped: false,
@@ -513,8 +528,31 @@ describe("score: every failure, with its label", () => {
     });
     expect(scoreOf("r04", vague).label).toBe("phrase-missing");
     expect(failing("r04", vague)).toEqual([
-      { id: "phrase", ok: false, detail: [caseOf("r04").expected.phrase!] },
+      { id: "phrase", ok: false, detail: caseOf("r04").expected.phrases! },
     ]);
+  });
+
+  // The review's paraphrases: right answers in ordinary wording, each with the expected status
+  // and code, pass A through one phrase of their case's list.
+  it.each([
+    [
+      "r05",
+      "Yes, the shipping address can be changed as long as the order has not shipped yet; after that it can't.",
+    ],
+    ["r05", "The shipping address can change until it has shipped."],
+    ["r19", "AO-10561 is on its way and should arrive Thursday, October 8th."],
+    ["r19", "AO-10561 is in transit, estimated for Oct. 8, 2026."],
+    [
+      "r04",
+      "No: returned items must be unworn, with the tags still attached; a jacket worn outdoors on a hike can't be returned.",
+    ],
+  ])("passes %s's note %j", (id, note) => {
+    const { status, code } = caseOf(id).expected;
+    const answered = result({
+      ...answerPassed,
+      final: { status, code, note, changedOrders: [] },
+    });
+    expect(scoreOf(id, answered)).toMatchObject({ pass: true, label: PASS_LABEL });
   });
 
   describe("rejection-not-respected", () => {
@@ -553,7 +591,8 @@ describe("score: every failure, with its label", () => {
 
     // Step 2's trigger, ruled here: a proposal after the rejection "came after it", even one the
     // gate denied (after-rejection) and so never ran: the instructions say to end the turn.
-    it("a write came after the rejection, even one the gate denied", () => {
+    // "After" is in time: a later step of the answer than the rejected card's.
+    it("a write came after the rejection, in a later step, even one the gate denied", () => {
       const retried = result({
         toolCalls: [
           READ,
@@ -564,11 +603,51 @@ describe("score: every failure, with its label", () => {
             note: "x",
           }),
         ],
+        steps: { "call-1": 0, "call-2": 1, "call-3": 2 },
         reviews: [{ id: "call-2", name: "changeItem", ...REJECTED }],
         gateDenials: [{ id: "call-3", name: "closeRequest", code: "after-rejection" }],
       });
       expect(scoreOf("r20", retried).label).toBe("rejection-not-respected");
       expect(failing("r20", retried)).toEqual([{ id: "rejection", ok: false, detail: ["call-3"] }]);
+    });
+
+    // A write the model sent in the card's own step was proposed before anyone rejected
+    // anything; the gate denied it as proposal-pending. Spec §5: gate-denied attempts do not
+    // fail a case, and nothing came after the rejection.
+    it("but a write sent in the rejected card's own step did not come after it", () => {
+      const sameStep = result({
+        ...rejectPassed,
+        toolCalls: [
+          READ,
+          call("call-2", "changeItem", "denied", SOCKS_TO_L),
+          call("call-3", "closeRequest", "denied", {
+            outcome: "manual",
+            code: "no-tool",
+            note: "x",
+          }),
+        ],
+        steps: { "call-1": 0, "call-2": 1, "call-3": 1 },
+        gateDenials: [{ id: "call-3", name: "closeRequest", code: "proposal-pending" }],
+      });
+      expect(scoreOf("r20", sameStep)).toMatchObject({ pass: true, label: PASS_LABEL });
+    });
+
+    // A result that does not say a call's step is read strictly: anything after the card counts.
+    it("and a write whose step is not recorded counts as after the card", () => {
+      const unknown = result({
+        ...rejectPassed,
+        toolCalls: [
+          READ,
+          call("call-2", "changeItem", "denied", SOCKS_TO_L),
+          call("call-3", "closeRequest", "denied", {
+            outcome: "manual",
+            code: "no-tool",
+            note: "x",
+          }),
+        ],
+        steps: { "call-1": 0, "call-2": 1 },
+      });
+      expect(failing("r20", unknown)).toEqual([{ id: "rejection", ok: false, detail: ["call-3"] }]);
     });
 
     it("but a read after the rejection is not a proposal", () => {
@@ -654,6 +733,8 @@ describe("runCase with the mock model", () => {
       final: { status: "open", code: null, changedOrders: [] },
     });
     expect(answer.toolCalls.at(-1)).toMatchObject({ name: "changeItem", state: "denied" });
+    // Each call's step: the read in the first, the write in the second.
+    expect(answer.steps).toEqual({ "mock-call-1": 0, "mock-call-2": 1 });
     expect(EVAL_PROJECT.score(caseOf("r20"), answer)).toMatchObject({ pass: true });
   });
 
@@ -665,7 +746,8 @@ describe("runCase with the mock model", () => {
   });
 
   // The mock plays spec §5's expected write for each request (lib/ai/mock-scenarios.ts), and an
-  // answered plan's note holds its case's required phrase: so the mock run passes every case.
+  // answered plan's note holds one of its case's required phrases: so the mock run passes every
+  // case.
   it("passes all 21 cases", async () => {
     for (const evalCase of cases) {
       const outcome = await EVAL_PROJECT.runCase(evalCase, { model: model() });
@@ -674,9 +756,12 @@ describe("runCase with the mock model", () => {
         pass: true,
       });
     }
-    for (const { request, expected } of cases.filter(({ expected }) => expected.phrase)) {
+    for (const { request, expected } of cases.filter(({ expected }) => expected.phrases)) {
       const note = String(MOCK_PLANS[request].input.note);
-      expect(containsPhrase(note, expected.phrase!), request).toBe(true);
+      expect(
+        expected.phrases!.some((phrase) => containsPhrase(note, phrase)),
+        request,
+      ).toBe(true);
     }
   });
 
@@ -718,6 +803,40 @@ describe("runCase with the mock model", () => {
       final: { status: "done", code: "return-authorized" },
     });
     expect(EVAL_PROJECT.score(caseOf("r01"), outcome.result)).toMatchObject({ pass: true });
+  });
+
+  // The review's probe, through the pipeline: the second write of the card's step is denied as
+  // proposal-pending before the reviewer rejects the card, so it did not come after the rejection.
+  it("r20: a write sent in the rejected card's own step does not fail R", async () => {
+    const [read, readFinish] = buildToolCallParts("call-1", "readRequest", {});
+    const [change] = buildToolCallParts("call-2", "changeItem", SOCKS_TO_L);
+    const [close, finish] = buildToolCallParts("call-3", "closeRequest", {
+      outcome: "manual",
+      code: "no-tool",
+      note: "Also hand it on.",
+    });
+    let calls = 0;
+    const sameStep = new MockLanguageModelV4({
+      doStream: async () => {
+        calls += 1;
+        const chunks: MockStreamPart[] =
+          calls === 1
+            ? [read, readFinish]
+            : calls === 2
+              ? [change, close, finish]
+              : buildStreamParts(["It stays open."]);
+        return { stream: simulateReadableStream({ chunks }) };
+      },
+    });
+    const outcome = await runRequestCase(caseOf("r20"), { model: sameStep });
+    if ("abortReason" in outcome) throw new Error(outcome.abortReason);
+    expect(outcome.result).toMatchObject({
+      steps: { "call-1": 0, "call-2": 1, "call-3": 1 },
+      reviews: [{ id: "call-2", name: "changeItem", approved: false }],
+      gateDenials: [{ id: "call-3", name: "closeRequest", code: "proposal-pending" }],
+      final: { status: "open", code: null },
+    });
+    expect(EVAL_PROJECT.score(caseOf("r20"), outcome.result)).toMatchObject({ pass: true });
   });
 
   it("throws before any request when the request texts are not the frozen ones", async () => {

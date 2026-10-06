@@ -501,10 +501,10 @@ describe("validateAndClean — the tool parts (P2's spec §4.3)", () => {
   // An answer is acted on only in the history's last message, the continuation (ai
   // collect-tool-approvals.ts); anywhere else the SDK never runs it, and an approved call kept
   // there would reach the model with no result. So it is dropped, not refused, and the chat goes
-  // on (P2's spec §4.3; a visitor may type after a continuation failed).
+  // on (P2's spec §4.3; a visitor may type after a continuation failed). A person's rejection is
+  // the exception, below.
   it.each([
     ["an approval answered", ANSWERED],
-    ["a rejection answered", REJECTED],
     ["a card left unanswered", CARD],
   ])(
     "drops %s outside the history's last message, instead of refusing the request",
@@ -522,6 +522,32 @@ describe("validateAndClean — the tool parts (P2's spec §4.3)", () => {
       ]);
     },
   );
+
+  // A rejection whose continuation never came (a Stop, an Esc, a 429, a lost connection) stays
+  // approval-responded in the browser, whose fold still counts it. The server keeps it too, as
+  // the denial the continuation would have left, so its gate denies every later write as the
+  // browser's does (P2's spec §3 B7), and the model sees the call with a denied result.
+  it("keeps a person's rejection outside the history's last message, as the denial it became", async () => {
+    const messages = await cleanedMessages([
+      user("Hi"),
+      assistant({ type: "step-start" }, READ, REJECTED),
+      user("Handle it again."),
+    ]);
+    expect(messages.map(({ role }) => role)).toEqual(["user", "assistant", "user"]);
+    expect(messages[1].parts).toEqual([
+      { type: "step-start" },
+      READ,
+      { ...REJECTED, state: "output-denied" },
+    ]);
+  });
+
+  it("keeps a rejection alone in its message, so the message and the rejection stay", async () => {
+    expect(await cleaned([user("Hi"), assistant(REJECTED), user("Handle it again.")])).toEqual([
+      { role: "user", parts: ["Hi"] },
+      { role: "assistant", parts: ["<tool-change>"] },
+      { role: "user", parts: ["Handle it again."] },
+    ]);
+  });
 
   it("drops calls that never finished: streaming, waiting for their run, or preliminary", async () => {
     expect(

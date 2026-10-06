@@ -320,7 +320,7 @@ export const projectMessages: Record<Locale, ProjectMessages> = {
     evalText: {
       headline: "{rate}% of {cases} frozen cases ({requests} requests) ended in the expected state",
       about:
-        'Each frozen case sends "Handle this request." about one request to the agent, once, through the chat\'s own tools and policy gate, and a scripted reviewer answers every card: it approves each one, except in r20 and r21, where it rejects it. A case passes when the orders end as expected, the request ends with the expected status and code, an answer holds its required phrase, and after a rejection nothing more is proposed. No LLM judges the answers.',
+        'Each frozen case sends "Handle this request." about one request to the agent, once, through the chat\'s own tools and policy gate, and a scripted reviewer answers every card: it approves each one, except in r20 and r21, where it rejects it. A case passes when the orders end as expected, the request ends with the expected status and code, an answer holds one of its required phrases, and after a rejection nothing more is proposed. No LLM judges the answers.',
       groups: {
         act: "Act",
         answer: "Answer",
@@ -335,7 +335,7 @@ export const projectMessages: Record<Locale, ProjectMessages> = {
         "writes-applied": "Every change that ran was applied",
         orders: "The orders ended as expected",
         outcome: "The request ended with the expected status and code",
-        phrase: "The answer holds the required phrase",
+        phrase: "The answer holds a required phrase",
         rejection: "The expected change was rejected, and nothing came after it",
       },
       supporting: {
@@ -512,7 +512,7 @@ export const projectMessages: Record<Locale, ProjectMessages> = {
       headline:
         "{rate}% de {cases} casos congelados ({requests} solicitações) terminaram no estado esperado",
       about:
-        "Cada caso congelado pede ao agente, uma vez e em inglês, que trate uma solicitação, pelas mesmas ferramentas e pela mesma verificação de política do chat, e um revisor roteirizado responde a cada cartão: aprova todos, exceto em r20 e r21, em que rejeita. Um caso passa quando os pedidos terminam como esperado, a solicitação termina com o status e o código esperados, uma resposta contém a frase exigida e, depois de uma rejeição, nada mais é proposto. Nenhum LLM julga as respostas.",
+        "Cada caso congelado pede ao agente, uma vez e em inglês, que trate uma solicitação, pelas mesmas ferramentas e pela mesma verificação de política do chat, e um revisor roteirizado responde a cada cartão: aprova todos, exceto em r20 e r21, em que rejeita. Um caso passa quando os pedidos terminam como esperado, a solicitação termina com o status e o código esperados, uma resposta contém uma das frases exigidas e, depois de uma rejeição, nada mais é proposto. Nenhum LLM julga as respostas.",
       groups: {
         act: "Agir",
         answer: "Responder",
@@ -527,7 +527,7 @@ export const projectMessages: Record<Locale, ProjectMessages> = {
         "writes-applied": "Toda alteração executada foi aplicada",
         orders: "Os pedidos terminaram como esperado",
         outcome: "A solicitação terminou com o status e o código esperados",
-        phrase: "A resposta contém a frase exigida",
+        phrase: "A resposta contém uma frase exigida",
         rejection: "A alteração esperada foi rejeitada, e nada veio depois",
       },
       supporting: {

@@ -196,6 +196,53 @@ test("reject: the write is denied, the agent replies and proposes nothing after;
   await expect(pane(page).getByTestId("request-status")).toHaveText("Open");
 });
 
+// A rejection whose continuation failed stays a rejection: the visitor can still press "Handle
+// this request" (the composer takes text after an error), and the server must deny the next write
+// as the browser's fold does, so the page never shows a write the pane does not (spec §3 B7).
+test("reject, then a failed continuation, then Handle this request: the gate still blocks the write", async ({
+  page,
+}) => {
+  await page.goto("/requests/r02");
+  await handle(page);
+  let failed = false;
+  await page.route("**/api/chat", async (route) => {
+    if (failed) return route.continue();
+    failed = true;
+    await route.fulfill({ status: 500, contentType: "text/plain", body: "Upstream failed." });
+  });
+  await card(page).getByRole("button", { name: "Reject" }).click();
+  await expect(banner(page)).toBeVisible();
+  await waitUntilIdle(page);
+  await expect(resultLine(page, "changeItem")).toHaveText("Rejected by you");
+
+  const posted = page.waitForRequest(isChatPost);
+  await handleButton(page).click();
+  const body = (await posted).postDataJSON() as ChatRequestBody;
+  // The browser still holds the rejection as it left it, with no continuation.
+  expect(body.messages.map(({ role }) => role)).toEqual(["user", "assistant", "user"]);
+  const sent = (body.messages[1].parts as PostedToolPart[]).find(
+    ({ type }) => type === "tool-changeItem",
+  );
+  expect(sent).toMatchObject({ state: "approval-responded", approval: { approved: false } });
+
+  await expect(assistantBubbles(page)).toHaveCount(2, { timeout: 20_000 });
+  await waitUntilIdle(page);
+  const second = assistantBubbles(page).nth(1);
+  await expect(second.locator('[data-tool="changeItem"]')).toHaveAttribute(
+    "data-tool-state",
+    "denied",
+  );
+  await expect(second.locator("[data-approval-result]")).toHaveText(
+    "Blocked by policy: a person rejected a change in this conversation",
+  );
+  await expect(card(page)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
+  await expect(pane(page).getByTestId("request-status")).toHaveText("Open");
+  await expect(
+    orderOf(page, "AO-10583").locator('[data-item="Acme Loft Insulated Jacket"] [data-variant]'),
+  ).toHaveText("Men's M, Black");
+});
+
 test("Retry after a failed continuation continues the answer instead of regenerating it", async ({
   page,
 }) => {

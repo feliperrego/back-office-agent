@@ -96,8 +96,12 @@ function approvalOf(part: RawToolPart): RawToolPart["approval"] {
  * ran, failed or was denied stays anywhere. A card and its answer stay only in the history's
  * last message, the continuation the SDK acts on (ai collect-tool-approvals.ts); anywhere else
  * the SDK never runs them, and an approved call kept there would reach the model with no result,
- * so they are dropped instead of refused (P2's spec §4.3). A call that never finished (streaming,
- * waiting for its run, or a preliminary output) is dropped, as convertToModelMessages'
+ * so they are dropped instead of refused (P2's spec §4.3). A person's rejection is kept anywhere:
+ * outside the last message its continuation never came (a Stop, a 429, a lost connection), so it
+ * becomes the output-denied part that continuation would have left, which the model sees as a
+ * denied result. The server's fold then still counts it, as the browser's does, and the gate
+ * denies every later write (spec §3 B7). A call that never finished (streaming, waiting for its
+ * run, or a preliminary output) is dropped, as convertToModelMessages'
  * ignoreIncompleteToolCalls drops it.
  */
 function rebuildToolPart(part: RawToolPart, inLastMessage: boolean): Part | null {
@@ -124,9 +128,13 @@ function rebuildToolPart(part: RawToolPart, inLastMessage: boolean): Part | null
       return { type, toolCallId, state, input: part.input, ...withApproval } as Part;
     case "approval-requested":
     case "approval-responded":
-      return inLastMessage
-        ? ({ type, toolCallId, state, input: part.input, ...withApproval } as Part)
-        : null;
+      if (inLastMessage) {
+        return { type, toolCallId, state, input: part.input, ...withApproval } as Part;
+      }
+      if (state === "approval-responded" && approval?.approved === false) {
+        return { type, toolCallId, state: "output-denied", input: part.input, approval } as Part;
+      }
+      return null;
     default:
       return null;
   }
