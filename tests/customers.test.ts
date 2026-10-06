@@ -12,6 +12,8 @@ import {
 } from "@/lib/store/customers";
 import { BUSINESS_DAYS_FROM, BUSINESS_DAYS_TO, businessDaysAfter } from "@/lib/store/business-days";
 import { parseStoreDate } from "@/lib/store/dates";
+import { readCaseSet } from "@/lib/eval/cases";
+import { applyPatch, type BackOfficeCase } from "@/lib/eval/project";
 import type { ProposedCall } from "@/lib/sandbox/calls";
 import { REQUESTS } from "@/lib/sandbox/requests";
 import { apply, check, openSandbox, orderOf } from "@/lib/sandbox/sandbox";
@@ -115,6 +117,18 @@ function withGateWrites(): StoreData {
   return store;
 }
 
+/**
+ * The gold of spec §5's S: each case's expected orders, the seed plus its hand-written patch
+ * (measurements/cases.json), for every case whose patch changes an order (spec §6, "the gold
+ * patches against P1's store invariants"). A case with no patch expects the seed itself.
+ */
+const GOLD: [string, StoreData][] = readCaseSet<BackOfficeCase>()
+  .cases.filter(({ expected }) => expected.patch.length > 0)
+  .map(({ id, expected }) => [
+    `${id}'s expected orders`,
+    { ...storeData, customers: applyPatch(storeData.customers, expected.patch) },
+  ]);
+
 const STORES: [string, StoreData][] = [
   ["data/customers.json", storeData],
   // AO-10468 is on day 9 of its window, AO-10351 on day 30, still inside it (spec §3 B10).
@@ -123,6 +137,7 @@ const STORES: [string, StoreData][] = [
     withReturnsAuthorized(["AO-10468", "AO-10351"]),
   ],
   ["the seed after one write the gate allows on each order", withGateWrites()],
+  ...GOLD,
 ];
 
 describe("data/customers.json (spec §2, P2-06)", () => {
@@ -155,6 +170,14 @@ describe("data/customers.json (spec §2, P2-06)", () => {
       "AO-10468: return authorized",
       "AO-10589: Acme Merino Hiking Socks (2-pack), Women's L",
       "AO-10512: return authorized",
+    ]);
+  });
+
+  it("builds the gold of the three acts, so the checks below run on each case's expected orders", () => {
+    expect(GOLD.map(([name]) => name)).toEqual([
+      "r01's expected orders",
+      "r02's expected orders",
+      "r03's expected orders",
     ]);
   });
 

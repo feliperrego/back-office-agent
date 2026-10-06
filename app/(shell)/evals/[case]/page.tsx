@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CaseView } from "@/components/evals/case-view";
-import { EVALS_PAGE, type SampleResult } from "@/lib/eval/project";
+import { EVALS_PAGE, type BackOfficeExtra, type BackOfficeResult } from "@/lib/eval/project";
 import { readShownRun } from "@/lib/eval/runs";
 import { caseView } from "@/lib/eval/view";
 import { format } from "@/lib/i18n/format";
@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: PageProps<"/evals/[case]">): 
 /** A case of the shown run and its trace (template spec §5.12), linked from the Evals page. */
 export default async function Case({ params }: PageProps<"/evals/[case]">) {
   const { case: id } = await params;
-  const data = caseView(readShownRun<SampleResult>(), id, EVALS_PAGE);
+  const data = caseView(readShownRun<BackOfficeResult, BackOfficeExtra>(), id, EVALS_PAGE);
   if (data === null) notFound();
   return <CaseView data={data} />;
 }

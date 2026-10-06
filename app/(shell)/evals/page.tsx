@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { EvalsView } from "@/components/evals/evals-view";
-import { EVALS_PAGE, type SampleResult } from "@/lib/eval/project";
+import { EVALS_PAGE, type BackOfficeExtra, type BackOfficeResult } from "@/lib/eval/project";
 import { readShownRun } from "@/lib/eval/runs";
 import { evalsView } from "@/lib/eval/view";
 import { messages } from "@/lib/i18n/messages";
@@ -13,5 +13,7 @@ export const metadata: Metadata = { title: messages.en.evals.title };
  * the project's words and links (EVALS_PAGE). Project-owned.
  */
 export default function Evals() {
-  return <EvalsView data={evalsView(readShownRun<SampleResult>(), EVALS_PAGE)} />;
+  return (
+    <EvalsView data={evalsView(readShownRun<BackOfficeResult, BackOfficeExtra>(), EVALS_PAGE)} />
+  );
 }

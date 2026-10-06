@@ -1,5 +1,4 @@
 import { READ_TOOL, isWriteTool, type WriteToolName } from "@/lib/sandbox/calls";
-import { SAMPLE_TOOL_NAME } from "@/lib/sample-tool";
 import { DEFAULT_MOCK_TEXT, type MockPrompt, type MockScenarios } from "./mock-steps";
 
 /**
@@ -12,7 +11,8 @@ import { DEFAULT_MOCK_TEXT, type MockPrompt, type MockScenarios } from "./mock-s
  * request." reads it and sums it up, with no write. After a denied or failed call the mock
  * answers with text and makes no new call: W-P11, fixed here in P2's own file, since the shell's
  * step machine reads JSON results only and would start over from the user message. The plans'
- * notes and reasons are the mock's own words, not the eval's required phrases (P2's spec §5).
+ * notes and reasons are the mock's own words; an answered plan's note holds its case's required
+ * phrase (measurements/cases.json), so the mock eval passes every case (lib/eval/project.test.ts).
  */
 
 /** The message that starts the work (P2's spec §1, "Handle this request"). */
@@ -197,34 +197,6 @@ export function refusalOf(prompt: MockPrompt): "denied" | "failed" | null {
   return results.some(({ output }) => output.type === "execution-denied") ? "denied" : "failed";
 }
 
-// The template's sample eval (lib/eval/project.ts) until P2's eval replaces it: a message that
-// names one of the sample's items gets a call to its tool, then an answer from the result. The
-// sample asks with no instructions and P2's agent always sends them, so the cue never fires in
-// P2's chat.
-
-/** A sample item id: "ITM-" and four digits, such as ITM-0042, in any case. */
-const ITEM_ID = /\bITM-(\d{4})\b/i;
-
-/** The item id a message names, in upper case, or null when it names none. */
-export function itemIdOf(text: string): string | null {
-  const match = ITEM_ID.exec(text);
-  return match === null ? null : `ITM-${match[1]}`;
-}
-
-/**
- * The mock's answer to a sample tool result, which reads { found: true, item: { id, name,
- * status } } or { found: false, itemId }: the item and its status, or that it was not found.
- */
-export function itemAnswer(lookup: unknown): string {
-  if (!isRecord(lookup) || lookup.found !== true || !isRecord(lookup.item)) {
-    const id =
-      isRecord(lookup) && typeof lookup.itemId === "string" ? `item ${lookup.itemId}` : "that item";
-    return `I couldn't find ${id}. Please check the item id.`;
-  }
-  const { id, name, status } = lookup.item;
-  return `Item ${String(id)} (${String(name)}) is ${String(status)}.`;
-}
-
 /** P2's cues and answers, which the step machine of lib/ai/mock-steps.ts runs. */
 export const MOCK_SCENARIOS: MockScenarios = {
   firstStep({ prompt, message, toolCallId }) {
@@ -235,14 +207,9 @@ export const MOCK_SCENARIOS: MockScenarios = {
     if (HANDLE_CUE.test(message) || READ_CUE.test(message)) {
       return { kind: "tool-call", toolCallId, toolName: READ_TOOL, input: {} };
     }
-    const itemId = itemIdOf(message);
-    if (itemId !== null && !prompt.some(({ role }) => role === "system")) {
-      return { kind: "tool-call", toolCallId, toolName: SAMPLE_TOOL_NAME, input: { itemId } };
-    }
     return { kind: "text", text: DEFAULT_MOCK_TEXT };
   },
   afterTool({ toolName, value }, { message, toolCallId }) {
-    if (toolName === SAMPLE_TOOL_NAME) return { kind: "text", text: itemAnswer(value) };
     if (isWriteTool(toolName)) return { kind: "text", text: writeAnswer(value) };
     if (toolName !== READ_TOOL) return undefined;
     const reading = readingOf(value);

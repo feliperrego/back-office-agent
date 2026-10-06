@@ -4,7 +4,6 @@ import { REQUESTS, requestById } from "@/lib/sandbox/requests";
 import { apply, check, openSandbox, orderOf } from "@/lib/sandbox/sandbox";
 import { storeData } from "@/lib/store/customers";
 import { readRequestOutput } from "@/lib/tools";
-import { SAMPLE_TOOL_NAME } from "@/lib/sample-tool";
 import {
   DENIED_ANSWER,
   FAILED_ANSWER,
@@ -137,22 +136,6 @@ describe("MOCK_SCENARIOS.firstStep", () => {
     expect(MOCK_SCENARIOS.firstStep(turn(HANDLE, failed))).toEqual({
       kind: "text",
       text: FAILED_ANSWER,
-    });
-  });
-
-  // The template's sample eval (lib/eval/project.ts) asks the model with no instructions, and
-  // P2's agent always sends them: the sample's cue never fires in P2's chat.
-  it("calls the template sample's tool only for a prompt with no instructions", () => {
-    const message = "Is item ITM-0108 available to borrow?";
-    const bare: MockPrompt = [{ role: "user", content: [{ type: "text", text: message }] }];
-    expect(MOCK_SCENARIOS.firstStep(turn(message, bare))).toMatchObject({
-      kind: "tool-call",
-      toolName: SAMPLE_TOOL_NAME,
-    });
-    const agent: MockPrompt = [{ role: "system", content: "Instructions." }, ...bare];
-    expect(MOCK_SCENARIOS.firstStep(turn(message, agent))).toEqual({
-      kind: "text",
-      text: DEFAULT_MOCK_TEXT,
     });
   });
 });

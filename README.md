@@ -1,4 +1,4 @@
-# Acme Outfitters Back Office — cases that end in the expected state: pending the first eval run
+# Acme Outfitters Back Office — the share of 21 frozen cases (19 requests) that ended in the expected state: pending the first eval run
 
 [![CI](https://github.com/feliperrego/back-office-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/feliperrego/back-office-agent/actions/workflows/ci.yml) · **[Live demo](<demo URL>)** · Part of the [feliperrego.com](https://feliperrego.com) portfolio
 
@@ -12,6 +12,8 @@ An agent that changes a store's orders must change nothing a person has not appr
 
 ## How it's measured
 Pending: the first eval run prints this line: the share of the frozen cases that end in the expected state with its 95% CI, the cases passed per group, the model, the date, the commit and a link to the raw data. Until then the Board and the Evals page show a mock run, labelled as one.
+
+Each case sends "Handle this request." about one request, once, in English, through the chat's own tools, policy gate and limits, and a scripted reviewer answers every card: it approves each one, the careless reviewer, except in two cases where it rejects it. A case passes when the final orders, the request's status and code, an answer's required phrase and, after a rejection, the absence of any further proposal are as expected; no LLM judges. A limit: 18 of the 21 cases end with the orders unchanged (16 closed without a change, 2 rejected), so the number mostly measures choosing the right outcome; only 3 change an order. Proposals the gate denied are counted, never failed. Portuguese is checked by hand, not measured; the run's dollar cost comes from the Gateway dashboard.
 
 ## Run it
 `pnpm install && pnpm dev:mock` (no API key needed)
