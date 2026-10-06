@@ -12,6 +12,9 @@ import {
 } from "@/lib/store/customers";
 import { BUSINESS_DAYS_FROM, BUSINESS_DAYS_TO, businessDaysAfter } from "@/lib/store/business-days";
 import { parseStoreDate } from "@/lib/store/dates";
+import type { ProposedCall } from "@/lib/sandbox/calls";
+import { REQUESTS } from "@/lib/sandbox/requests";
+import { apply, check, openSandbox, orderOf } from "@/lib/sandbox/sandbox";
 
 // P1's fictional customers (spec §2, P2-06), checked against the policies of spec §3, so an order
 // never contradicts the help center the agent applies. Copied from P1's tests/customers.test.ts
@@ -65,6 +68,12 @@ const FIELDS_BY_STATUS: Record<OrderStatus, { has: string[]; mayHave: string[] }
 };
 const OPTIONAL_FIELDS = ORDER_FIELDS.slice(ORDER_FIELDS.indexOf("shippedOn"));
 
+function orderById(id: string): Order {
+  return storeData.customers
+    .flatMap((customer) => customer.orders)
+    .find((order) => order.id === id)!;
+}
+
 /** The seed with a return authorized on each order named, dated today, as B1 and B3 write it. */
 function withReturnsAuthorized(ids: string[]): StoreData {
   const store = structuredClone(storeData);
@@ -80,6 +89,32 @@ function withReturnsAuthorized(ids: string[]): StoreData {
   return store;
 }
 
+/**
+ * The seed after the first write the gate allows on each order, if any: a return, else an item
+ * in size L. Each runs through apply() in a sandbox of its own customer's request, so the gate
+ * of spec §4.2 and these checks agree on what a write leaves.
+ */
+function withGateWrites(): StoreData {
+  const store = structuredClone(storeData);
+  for (const customer of store.customers) {
+    const requestId = REQUESTS.find((request) => request.customerId === customer.id)!.id;
+    customer.orders = customer.orders.map((order) => {
+      const reason = "Written by the store test.";
+      const calls: ProposedCall[] = [
+        { toolCallId: "c", toolName: "authorizeReturn", input: { orderId: order.id, reason } },
+        ...order.items.map(({ name }) => ({
+          toolCallId: "c",
+          toolName: "changeItem",
+          input: { orderId: order.id, item: name, newSize: "L", reason },
+        })),
+      ];
+      const call = calls.find((candidate) => check(candidate, openSandbox(requestId)).allowed);
+      return call ? orderOf(apply(call, openSandbox(requestId)), order.id)! : order;
+    });
+  }
+  return store;
+}
+
 const STORES: [string, StoreData][] = [
   ["data/customers.json", storeData],
   // AO-10468 is on day 9 of its window, AO-10351 on day 30, still inside it (spec §3 B10).
@@ -87,6 +122,7 @@ const STORES: [string, StoreData][] = [
     "the seed with returns authorized on AO-10468 and AO-10351",
     withReturnsAuthorized(["AO-10468", "AO-10351"]),
   ],
+  ["the seed after one write the gate allows on each order", withGateWrites()],
 ];
 
 describe("data/customers.json (spec §2, P2-06)", () => {
@@ -100,6 +136,26 @@ describe("data/customers.json (spec §2, P2-06)", () => {
   it("holds no return authorization: only the agent writes one", () => {
     const orders = storeData.customers.flatMap((customer) => customer.orders);
     expect(orders.filter((order) => "returnAuthorization" in order)).toEqual([]);
+  });
+
+  it("builds the store after the gate's writes: three returns and two size changes", () => {
+    const [, , [, written]] = STORES;
+    const changes = written.customers.flatMap((customer) =>
+      customer.orders.flatMap(({ id, returnAuthorization, items }) => {
+        if (returnAuthorization) return [`${id}: return authorized`];
+        const before = orderById(id).items;
+        return items.flatMap(({ name, variant }, index) =>
+          variant === before[index].variant ? [] : [`${id}: ${name}, ${variant}`],
+        );
+      }),
+    );
+    expect(changes).toEqual([
+      "AO-10351: return authorized",
+      "AO-10583: Acme Loft Insulated Jacket, Men's L, Black",
+      "AO-10468: return authorized",
+      "AO-10589: Acme Merino Hiking Socks (2-pack), Women's L",
+      "AO-10512: return authorized",
+    ]);
   });
 
   it("builds the store after two approved returns, so the checks below run on it too", () => {

@@ -1,14 +1,17 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { HELP_CENTER_DIR, readHelpCenter } from "@/lib/help-center/articles";
+import { REQUESTS_PATH } from "@/lib/sandbox/requests";
 import { CUSTOMERS_PATH } from "@/lib/store/customers";
 
-// The store, its customers and its orders are fictional, P1's (spec §2): every e-mail, URL and
-// domain they name sits under the reserved .example domain, so none can point at a real company.
-// Copied from P1's test at f56063b (P2-25), without P1's tickets.
+// The store, its customers and its orders are fictional, P1's (spec §2), and so are the requests
+// they send (spec §5): every e-mail, URL and domain they name sits under the reserved .example
+// domain, so none can point at a real company. Copied from P1's test at f56063b (P2-25), with
+// P2's requests in place of P1's tickets.
 const files = [
   ...readHelpCenter().map(({ file, content }) => ({ file: `${HELP_CENTER_DIR}/${file}`, content })),
   { file: CUSTOMERS_PATH, content: readFileSync(CUSTOMERS_PATH, "utf8") },
+  { file: REQUESTS_PATH, content: readFileSync(REQUESTS_PATH, "utf8") },
 ];
 
 // An e-mail address, whose domain is checked and whose local part ("maya.chen") is not.
