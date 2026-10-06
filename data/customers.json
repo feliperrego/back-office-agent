@@ -1,0 +1,312 @@
+{
+  "about": "The fictional customers of spec §3 and §10 P-05, chosen in the persona picker, with their orders as of asOf. Every name, e-mail, order and tracking number is invented; e-mails and URLs use the reserved .example domain. Prices are US dollars. Dates are written as a customer reads them, because an order ticket passes only when the reply holds its gold value word for word (spec §5). tests/customers.test.ts checks the orders against the policies of spec §3.",
+  "asOf": "October 1, 2026",
+  "currency": "USD",
+  "customers": [
+    {
+      "id": "cus-01",
+      "name": "Maya Chen",
+      "email": "maya.chen@mail.example",
+      "orders": [
+        {
+          "id": "AO-10351",
+          "placedOn": "August 24, 2026",
+          "status": "delivered",
+          "shippingMethod": "standard",
+          "items": [
+            {
+              "name": "Acme Basin 2P Tent",
+              "variant": "Green",
+              "quantity": 1,
+              "price": 289
+            },
+            {
+              "name": "Acme Basin 2P Tent Footprint",
+              "quantity": 1,
+              "price": 39
+            }
+          ],
+          "subtotal": 328,
+          "shippingCost": 0,
+          "total": 328,
+          "shippedOn": "August 25, 2026",
+          "trackingNumber": "AOT189460217",
+          "trackingUrl": "https://track.acmeoutfitters.example/AOT189460217",
+          "deliveredOn": "September 1, 2026"
+        },
+        {
+          "id": "AO-10547",
+          "placedOn": "September 25, 2026",
+          "status": "shipped",
+          "shippingMethod": "standard",
+          "items": [
+            {
+              "name": "Acme 45L Trekking Backpack",
+              "variant": "Slate gray",
+              "quantity": 1,
+              "price": 179
+            }
+          ],
+          "subtotal": 179,
+          "shippingCost": 0,
+          "total": 179,
+          "shippedOn": "September 28, 2026",
+          "trackingNumber": "AOT290574128",
+          "trackingUrl": "https://track.acmeoutfitters.example/AOT290574128",
+          "estimatedDelivery": "October 7, 2026"
+        }
+      ]
+    },
+    {
+      "id": "cus-02",
+      "name": "Daniel Okafor",
+      "email": "daniel.okafor@mail.example",
+      "orders": [
+        {
+          "id": "AO-10326",
+          "placedOn": "August 20, 2026",
+          "status": "returned",
+          "shippingMethod": "standard",
+          "items": [
+            {
+              "name": "Acme Waterproof Hiking Boots",
+              "variant": "Men's 10",
+              "quantity": 1,
+              "price": 164
+            }
+          ],
+          "subtotal": 164,
+          "shippingCost": 0,
+          "total": 164,
+          "shippedOn": "August 21, 2026",
+          "trackingNumber": "AOT175302964",
+          "trackingUrl": "https://track.acmeoutfitters.example/AOT175302964",
+          "deliveredOn": "August 28, 2026",
+          "returnReceivedOn": "September 15, 2026",
+          "refund": {
+            "amount": 164,
+            "issuedOn": "September 18, 2026",
+            "to": "original payment method"
+          }
+        },
+        {
+          "id": "AO-10583",
+          "placedOn": "September 30, 2026",
+          "status": "processing",
+          "shippingMethod": "express",
+          "items": [
+            {
+              "name": "Acme Loft Insulated Jacket",
+              "variant": "Men's M, Black",
+              "quantity": 1,
+              "price": 199
+            }
+          ],
+          "subtotal": 199,
+          "shippingCost": 15,
+          "total": 214
+        }
+      ]
+    },
+    {
+      "id": "cus-03",
+      "name": "Sofia Ramirez",
+      "email": "sofia.ramirez@mail.example",
+      "orders": [
+        {
+          "id": "AO-10214",
+          "placedOn": "August 3, 2026",
+          "status": "delivered",
+          "shippingMethod": "standard",
+          "items": [
+            {
+              "name": "Acme 20°F Down Sleeping Bag",
+              "variant": "Regular",
+              "quantity": 1,
+              "price": 239
+            }
+          ],
+          "subtotal": 239,
+          "shippingCost": 0,
+          "total": 239,
+          "shippedOn": "August 4, 2026",
+          "trackingNumber": "AOT104826173",
+          "trackingUrl": "https://track.acmeoutfitters.example/AOT104826173",
+          "deliveredOn": "August 12, 2026"
+        },
+        {
+          "id": "AO-10468",
+          "placedOn": "September 14, 2026",
+          "status": "delivered",
+          "shippingMethod": "standard",
+          "items": [
+            {
+              "name": "Acme Rain Jacket",
+              "variant": "Women's S, Blue",
+              "quantity": 1,
+              "price": 149
+            }
+          ],
+          "subtotal": 149,
+          "shippingCost": 0,
+          "total": 149,
+          "shippedOn": "September 15, 2026",
+          "trackingNumber": "AOT246815093",
+          "trackingUrl": "https://track.acmeoutfitters.example/AOT246815093",
+          "deliveredOn": "September 22, 2026"
+        },
+        {
+          "id": "AO-10589",
+          "placedOn": "September 30, 2026",
+          "status": "processing",
+          "shippingMethod": "standard",
+          "items": [
+            {
+              "name": "Acme Trekking Poles",
+              "quantity": 1,
+              "price": 89
+            },
+            {
+              "name": "Acme Merino Hiking Socks (2-pack)",
+              "variant": "Women's M",
+              "quantity": 1,
+              "price": 26
+            }
+          ],
+          "subtotal": 115,
+          "shippingCost": 0,
+          "total": 115
+        }
+      ]
+    },
+    {
+      "id": "cus-04",
+      "name": "Liam Walsh",
+      "email": "liam.walsh@mail.example",
+      "orders": [
+        {
+          "id": "AO-10307",
+          "placedOn": "August 17, 2026",
+          "status": "delivered",
+          "shippingMethod": "standard",
+          "items": [
+            {
+              "name": "Acme Basin 2P Tent",
+              "variant": "Orange",
+              "quantity": 1,
+              "price": 289
+            }
+          ],
+          "subtotal": 289,
+          "shippingCost": 0,
+          "total": 289,
+          "shippedOn": "August 18, 2026",
+          "trackingNumber": "AOT162047538",
+          "trackingUrl": "https://track.acmeoutfitters.example/AOT162047538",
+          "deliveredOn": "August 26, 2026"
+        },
+        {
+          "id": "AO-10570",
+          "placedOn": "September 29, 2026",
+          "status": "shipped",
+          "shippingMethod": "express",
+          "items": [
+            {
+              "name": "Acme Lumen Rechargeable Headlamp",
+              "quantity": 1,
+              "price": 44
+            },
+            {
+              "name": "Acme Kettle Camp Stove",
+              "quantity": 1,
+              "price": 59
+            }
+          ],
+          "subtotal": 103,
+          "shippingCost": 15,
+          "total": 118,
+          "shippedOn": "September 30, 2026",
+          "trackingNumber": "AOT301647289",
+          "trackingUrl": "https://track.acmeoutfitters.example/AOT301647289",
+          "estimatedDelivery": "October 2, 2026"
+        }
+      ]
+    },
+    {
+      "id": "cus-05",
+      "name": "Priya Nair",
+      "email": "priya.nair@mail.example",
+      "orders": [
+        {
+          "id": "AO-10229",
+          "placedOn": "August 5, 2026",
+          "status": "delivered",
+          "shippingMethod": "standard",
+          "items": [
+            {
+              "name": "Acme 45L Trekking Backpack",
+              "variant": "Forest green",
+              "quantity": 1,
+              "price": 179
+            }
+          ],
+          "subtotal": 179,
+          "shippingCost": 0,
+          "total": 179,
+          "shippedOn": "August 6, 2026",
+          "trackingNumber": "AOT118390245",
+          "trackingUrl": "https://track.acmeoutfitters.example/AOT118390245",
+          "deliveredOn": "August 13, 2026"
+        },
+        {
+          "id": "AO-10512",
+          "placedOn": "September 21, 2026",
+          "status": "delivered",
+          "shippingMethod": "standard",
+          "items": [
+            {
+              "name": "Acme Loft Insulated Jacket",
+              "variant": "Women's M, Plum",
+              "quantity": 1,
+              "price": 199
+            }
+          ],
+          "subtotal": 199,
+          "shippingCost": 0,
+          "total": 199,
+          "shippedOn": "September 22, 2026",
+          "trackingNumber": "AOT271938406",
+          "trackingUrl": "https://track.acmeoutfitters.example/AOT271938406",
+          "deliveredOn": "September 29, 2026"
+        },
+        {
+          "id": "AO-10561",
+          "placedOn": "September 28, 2026",
+          "status": "shipped",
+          "shippingMethod": "standard",
+          "items": [
+            {
+              "name": "Acme Waterproof Hiking Boots",
+              "variant": "Women's 8",
+              "quantity": 1,
+              "price": 164
+            },
+            {
+              "name": "Acme Merino Hiking Socks (2-pack)",
+              "variant": "Women's M",
+              "quantity": 2,
+              "price": 26
+            }
+          ],
+          "subtotal": 216,
+          "shippingCost": 0,
+          "total": 216,
+          "shippedOn": "September 29, 2026",
+          "trackingNumber": "AOT298106352",
+          "trackingUrl": "https://track.acmeoutfitters.example/AOT298106352",
+          "estimatedDelivery": "October 8, 2026"
+        }
+      ]
+    }
+  ]
+}
