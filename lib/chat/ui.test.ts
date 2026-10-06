@@ -3,13 +3,18 @@ import { describe, expect, it } from "vitest";
 import {
   announcement,
   annotateFinish,
+  awaitsApproval,
+  continuesAutomatically,
   describeChatError,
   hasTextOrTools,
   hasVisibleText,
+  holdsApproval,
   isBusy,
   isComposingKey,
   isSendDoubleClick,
+  pendingApprovals,
   regenerateSlot,
+  retryAction,
   SEND_DOUBLE_CLICK_MS,
   shouldSubmitOnKey,
   showsAssistant,
@@ -536,5 +541,141 @@ describe("the helpers are generic over the message type", () => {
         noted,
       ),
     ).toBe("complete");
+  });
+});
+
+// The approval seams (P2's spec §4.5, P2-21; template spec §5.8): a server tool that needs a
+// person's approval shows as a card while it waits, and its answer continues the same message.
+// A card the gate decided by itself carries isAutomatic and needs no answer (ai 7.0.114 docs,
+// "Client-Side Approval UI"). These helpers read the parts only; Chat acts on them.
+describe("approvals", () => {
+  const u = user("u1", "Handle this request.");
+  type ApprovalPart = Extract<UIMessage["parts"][number], { type: `tool-${string}` }>;
+  const write = (part: Record<string, unknown>) =>
+    ({
+      type: "tool-authorizeReturn",
+      toolCallId: "call-2",
+      input: { orderId: "AO-10468", reason: "Doesn't fit." },
+      ...part,
+    }) as unknown as ApprovalPart;
+  /** An answer whose read ran, then whose write is in `part`'s state, maybe with text after. */
+  function withWrite(part: Record<string, unknown>, after: UIMessage["parts"] = []): UIMessage {
+    return {
+      id: "a1",
+      role: "assistant",
+      parts: [
+        { type: "step-start" },
+        {
+          type: "tool-readRequest",
+          toolCallId: "call-1",
+          state: "output-available",
+          input: {},
+          output: { request: { id: "r01" } },
+        } as unknown as ApprovalPart,
+        { type: "step-start" },
+        write(part),
+        ...after,
+      ],
+    };
+  }
+  const waiting = withWrite({ state: "approval-requested", approval: { id: "ap-1" } });
+  const automatic = withWrite({
+    state: "approval-requested",
+    approval: { id: "ap-1", isAutomatic: true },
+  });
+  const answered = (approved: boolean) =>
+    withWrite({ state: "approval-responded", approval: { id: "ap-1", approved } });
+  const ran = withWrite(
+    { state: "output-available", output: { ok: true }, approval: { id: "ap-1", approved: true } },
+    [{ type: "step-start" }, { type: "text", text: "Applied.", state: "done" }],
+  );
+  const rejected = withWrite(
+    { state: "output-denied", approval: { id: "ap-1", approved: false } },
+    [{ type: "step-start" }, { type: "text", text: "It stays open.", state: "done" }],
+  );
+  const gateDenied = withWrite(
+    {
+      state: "output-denied",
+      approval: { id: "ap-1", approved: false, isAutomatic: true, reason: "outside-window" },
+    },
+    [{ type: "step-start" }, { type: "text", text: "Declined.", state: "done" }],
+  );
+
+  it("lists the cards a person must answer, and none the gate decided", () => {
+    expect(pendingApprovals(waiting)).toEqual(["ap-1"]);
+    expect(pendingApprovals(automatic)).toEqual([]);
+    for (const message of [answered(true), ran, rejected, gateDenied, u]) {
+      expect(pendingApprovals(message)).toEqual([]);
+    }
+  });
+
+  it("a card waits only in the conversation's last message", () => {
+    expect(awaitsApproval([u, waiting])).toBe(true);
+    expect(awaitsApproval([u, automatic])).toBe(false);
+    expect(awaitsApproval([u, answered(true)])).toBe(false);
+    // A later message leaves an unanswered card behind (spec §4.3): nothing waits any more.
+    expect(awaitsApproval([u, waiting, user("u2", "Hello?")])).toBe(false);
+    expect(awaitsApproval([])).toBe(false);
+  });
+
+  it("a message holds a person's approval while a card waits, once it is answered and once it is decided", () => {
+    for (const message of [waiting, answered(true), answered(false), ran, rejected]) {
+      expect(holdsApproval(message)).toBe(true);
+    }
+    // The gate's own decisions and a read need no person.
+    for (const message of [automatic, gateDenied, assistant("a1", "text"), u]) {
+      expect(holdsApproval(message)).toBe(false);
+    }
+  });
+
+  // Regenerate replaces the last answer, so it would erase a card or a decided write from the
+  // conversation, which is the audit log (spec §2, critic A4).
+  it("hides Regenerate while a card waits and under any decided write", () => {
+    for (const message of [waiting, answered(true), ran, rejected]) {
+      expect(regenerateSlot([u, message], "ready", false, hasTextOrTools)).toBeNull();
+      expect(regenerateSlot([u, message], "ready", true, hasTextOrTools)).toBeNull();
+      expect(regenerateSlot([u, message], "error", false, hasTextOrTools)).toBeNull();
+    }
+    expect(regenerateSlot([u, gateDenied], "ready", false, hasTextOrTools)).toBe("after-answer");
+  });
+
+  it("announces that an approval is needed once the request is over and a card waits", () => {
+    const idle = { status: "ready" as const, failed: false, stoppedByUser: false };
+    expect(announcement({ ...idle, messages: [u, waiting] }, hasTextOrTools)).toBe(
+      "approvalNeeded",
+    );
+    expect(announcement({ ...idle, messages: [u, ran] }, hasTextOrTools)).toBe("complete");
+    expect(
+      announcement({ ...idle, messages: [u, waiting], status: "streaming" }, hasTextOrTools),
+    ).toBeNull();
+    expect(announcement({ ...idle, messages: [u, waiting], failed: true }, hasTextOrTools)).toBe(
+      "failed",
+    );
+  });
+
+  // A failed continuation (a 429, a lost connection, Stop) leaves the person's answer, or the
+  // write it ran, in the last message; regenerating would drop them (critic A3).
+  it("Retry continues after a failed continuation, regenerates otherwise, and waits for a card's answer", () => {
+    expect(retryAction([u, answered(true)])).toBe("continue");
+    expect(retryAction([u, answered(false)])).toBe("continue");
+    expect(retryAction([u, ran])).toBe("continue");
+    expect(retryAction([u, rejected])).toBe("continue");
+    expect(retryAction([u, waiting])).toBeNull();
+    expect(retryAction([u])).toBe("regenerate");
+    expect(retryAction([u, assistant("a1", "partial")])).toBe("regenerate");
+    expect(retryAction([u, gateDenied])).toBe("regenerate");
+  });
+
+  // Between the answer and the request that continues it, useChat is ready for a moment: the
+  // chips stay as they are instead of settling to "Not finished".
+  it("knows when the chat continues on its own: every card of the last step answered, idle, no Stop", () => {
+    expect(continuesAutomatically([u, answered(true)], "ready", false)).toBe(true);
+    expect(continuesAutomatically([u, answered(false)], "ready", false)).toBe(true);
+    expect(continuesAutomatically([u, answered(true)], "ready", true)).toBe(false);
+    expect(continuesAutomatically([u, answered(true)], "error", false)).toBe(false);
+    expect(continuesAutomatically([u, answered(true)], "streaming", false)).toBe(false);
+    for (const message of [waiting, ran, rejected, gateDenied]) {
+      expect(continuesAutomatically([u, message], "ready", false)).toBe(false);
+    }
   });
 });

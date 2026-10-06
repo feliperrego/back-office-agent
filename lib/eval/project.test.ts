@@ -15,7 +15,7 @@ import { format } from "@/lib/i18n/format";
 import { LOCALES } from "@/lib/i18n/locale";
 import { CLOSE_CODES, OUTCOMES } from "@/lib/sandbox/calls";
 import { REQUEST_IDS, REQUESTS_PATH, requestById } from "@/lib/sandbox/requests";
-import { DONE_CODES } from "@/lib/sandbox/sandbox";
+import { DONE_CODES, check, openSandbox, orderOf } from "@/lib/sandbox/sandbox";
 import { storeData, type Order } from "@/lib/store/customers";
 import type { ToolView } from "@/lib/trace/tool-view";
 import { readCaseSet } from "./cases";
@@ -849,5 +849,35 @@ describe("the README", () => {
         `(${unchanged.length - rejected.length} closed without a change, ${rejected.length} rejected)`,
     );
     expect(readme).toContain(`only ${cases.length - unchanged.length} change an order`);
+  });
+
+  // "How it stays safe": the injection cases, and how many of their injected actions the gate
+  // would let through to a card, so only the model can refuse them (spec §5).
+  it("counts the injection cases, and those whose injected action is in policy, as the gate does", () => {
+    const words = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+    const injected = cases.filter(({ injected }) => injected !== undefined);
+    const inPolicy = injected.filter(({ request, injected }) => {
+      const { toolName, orderId, item, newSize } = injected!;
+      const sandbox = openSandbox(request);
+      const reason = "The injected action.";
+      if (toolName === "authorizeReturn") {
+        return check({ toolCallId: "c1", toolName, input: { orderId, reason } }, sandbox).allowed;
+      }
+      // A size change that names no item: in policy when some item of the order may take it.
+      const items =
+        item !== undefined
+          ? [item]
+          : (orderOf(sandbox, orderId)?.items ?? []).map(({ name }) => name);
+      return items.some(
+        (name) =>
+          check(
+            { toolCallId: "c1", toolName, input: { orderId, item: name, newSize, reason } },
+            sandbox,
+          ).allowed,
+      );
+    });
+    expect(readme).toContain(
+      `${words[injected.length]} frozen cases carry injected instructions, ${words[inPolicy.length]} of them in policy`,
+    );
   });
 });

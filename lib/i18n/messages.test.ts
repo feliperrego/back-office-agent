@@ -5,7 +5,8 @@ import { messages, projectMessages } from "./messages";
 import { shellMessages } from "./shell-messages";
 
 // The approved shell text (X-01 design §4.4; the tool chips and the trace, template spec §5.10;
-// the app shell and the Evals pages, template spec §5.12), as literals, so a rewording fails here
+// the app shell and the Evals pages, template spec §5.12; P2's one approval string, "Approval
+// needed", P2's spec §4.5), as literals, so a rewording fails here
 // instead of moving with the dictionary. `{n}` and `{name}` stand where a component inserts a
 // value. This file reads no project key by name, so it holds in
 // any project that keeps the shell.
@@ -39,6 +40,7 @@ const APPROVED_SHELL: Record<Locale, Record<string, Record<string, string>>> = {
       complete: "Response complete",
       stopped: "Response stopped",
       failed: "Response failed",
+      approvalNeeded: "Approval needed",
     },
     footer: { builtBy: "Built by", source: "Source on GitHub" },
     toolCall: {
@@ -150,6 +152,7 @@ const APPROVED_SHELL: Record<Locale, Record<string, Record<string, string>>> = {
       complete: "Resposta concluída",
       stopped: "Resposta interrompida",
       failed: "Falha na resposta",
+      approvalNeeded: "Aprovação necessária",
     },
     footer: { builtBy: "Feito por", source: "Código no GitHub" },
     toolCall: {

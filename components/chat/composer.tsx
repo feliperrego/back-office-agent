@@ -10,8 +10,12 @@ type ComposerProps = {
   inputRef: Ref<HTMLTextAreaElement>;
   /** A request is in flight (submitted or streaming): the button is Stop. */
   busy: boolean;
-  /** The conversation has reached its message cap: the composer takes no more text. */
-  atCap: boolean;
+  /**
+   * Why the composer takes no text now, shown above it, or null when it takes text: the message
+   * cap's notice, or the project's line while a card waits for the person's answer (P2's spec
+   * §4.5).
+   */
+  readOnlyNotice: string | null;
   /** True while an IME composition is open on the page; Chat tracks it. */
   composing: RefObject<boolean>;
   /** Returns true when the text was sent, so the composer clears it. */
@@ -20,14 +24,23 @@ type ComposerProps = {
 };
 
 /**
- * Textarea plus one button that swaps Send and Stop (X-01 design §4.3). At the message cap the
- * textarea is read-only and marked disabled, so it keeps the focus and any draft, and a line above
- * it, tied to it by aria-describedby, says to start a new chat (template spec §5.8).
+ * Textarea plus one button that swaps Send and Stop (X-01 design §4.3). At the message cap, and
+ * while a card waits for the person's answer (P2's spec §4.5), the textarea is read-only and
+ * marked disabled, so it keeps the focus and any draft, and a line above it, tied to it by
+ * aria-describedby, says why: start a new chat, or answer the card (template spec §5.8).
  */
-export function Composer({ inputRef, busy, atCap, composing, onSend, onStop }: ComposerProps) {
-  const { t } = useLocale();
+export function Composer({
+  inputRef,
+  busy,
+  readOnlyNotice,
+  composing,
+  onSend,
+  onStop,
+}: ComposerProps) {
   const [value, setValue] = useState("");
-  const capNoticeId = useId();
+  const { t } = useLocale();
+  const noticeId = useId();
+  const readOnly = readOnlyNotice !== null;
   // When this composer last sent, for the Stop button's double-click guard.
   const sentAt = useRef<number | null>(null);
 
@@ -39,9 +52,9 @@ export function Composer({ inputRef, busy, atCap, composing, onSend, onStop }: C
 
   return (
     <div className="shrink-0 border-t bg-background px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-      {atCap && (
-        <p id={capNoticeId} className="mx-auto mb-2 w-full max-w-2xl text-sm text-muted-foreground">
-          {t.composer.capNotice}
+      {readOnly && (
+        <p id={noticeId} className="mx-auto mb-2 w-full max-w-2xl text-sm text-muted-foreground">
+          {readOnlyNotice}
         </p>
       )}
       <div className="mx-auto flex w-full max-w-2xl items-end gap-2">
@@ -65,10 +78,10 @@ export function Composer({ inputRef, busy, atCap, composing, onSend, onStop }: C
           rows={1}
           // Not `disabled`: a disabled control drops the focus and leaves the Tab order. Read-only
           // keeps both, and aria-disabled tells assistive technology it takes no text.
-          readOnly={atCap}
-          aria-disabled={atCap || undefined}
-          aria-describedby={atCap ? capNoticeId : undefined}
-          placeholder={atCap ? undefined : t.composer.placeholder}
+          readOnly={readOnly}
+          aria-disabled={readOnly || undefined}
+          aria-describedby={readOnly ? noticeId : undefined}
+          placeholder={readOnly ? undefined : t.composer.placeholder}
           className="max-h-40 min-h-11 min-w-0 resize-none aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
         />
         {busy ? (
@@ -93,7 +106,7 @@ export function Composer({ inputRef, busy, atCap, composing, onSend, onStop }: C
             size="icon-lg"
             className="pointer-coarse:size-11"
             aria-label={t.composer.send}
-            disabled={value.trim() === "" || atCap}
+            disabled={value.trim() === "" || readOnly}
             onClick={submit}
           >
             <ArrowUp />

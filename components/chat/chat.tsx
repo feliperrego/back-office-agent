@@ -1,13 +1,18 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import type { ChatTransport, UIMessage } from "ai";
+import {
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+  type ChatTransport,
+  type UIMessage,
+} from "ai";
 import { ArrowDown, Plus } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Composer } from "@/components/chat/composer";
 import { EmptyState, type EmptyStateContent } from "@/components/chat/empty-state";
 import {
   MessageList,
+  type ApprovalAnswer,
   type AssistantRenderer,
   type MessageAnnotation,
 } from "@/components/chat/message-list";
@@ -21,15 +26,29 @@ import { MAX_MESSAGES } from "@/lib/chat/limits";
 import {
   announcement,
   annotateFinish,
+  awaitsApproval,
+  continuesAutomatically,
   describeChatError,
   hasTextOrTools,
   hasVisibleText,
   isBusy,
   isComposingKey,
   regenerateSlot,
+  retryAction,
   type ChatErrorKind,
 } from "@/lib/chat/ui";
 import { format } from "@/lib/i18n/format";
+
+/**
+ * What a header passed to Chat may do besides New chat (P2's spec §4.5): send a text as the
+ * person's message, as a suggested prompt does, when Chat can take one.
+ */
+export type ChatHeaderActions = {
+  /** Sends the text; false when Chat could not take it, as the composer's send. */
+  send: (text: string) => boolean;
+  /** Idle, under the message cap, and with no card waiting: a send would go. */
+  canSend: boolean;
+};
 
 export type ChatProps<M extends UIMessage> = {
   modelLabel: string;
@@ -60,12 +79,42 @@ export type ChatProps<M extends UIMessage> = {
    */
   hasContent?: (message: M) => boolean;
   /**
-   * What sits above the conversation, given the New chat button. Default: the site header with
-   * New chat in its actions. A chat in a panel (a drawer, a docked panel) passes its own bar, so
-   * the page keeps its one header[data-model] (template spec §5.8).
+   * What sits above the conversation, given the New chat button and a way to send. Default: the
+   * site header with New chat in its actions. A chat in a panel (a drawer, a docked panel) passes
+   * its own bar, so the page keeps its one header[data-model] (template spec §5.8); a bar may
+   * hold a button that sends, such as P2's "Handle this request" (P2's spec §4.5).
    */
-  header?: (newChat: ReactNode) => ReactNode;
+  header?: (newChat: ReactNode, chat: ChatHeaderActions) => ReactNode;
+  /**
+   * The line above the read-only composer while a card waits for the person's answer, tied to it
+   * by aria-describedby (P2's spec §4.5): the project's words, such as "Approve or reject the card
+   * above". Default: the status line's "Approval needed".
+   */
+  approvalNotice?: string;
+  /**
+   * Called with the conversation each time it changes, so the page can show what it holds, such
+   * as P2's request pane, which folds its tool calls into the orders as they are now (P2's spec
+   * §1). Chat keeps the latest callback, so it need not be stable.
+   */
+  onMessagesChange?: (messages: M[]) => void;
 };
+
+/**
+ * Renders a header passed to Chat. A component of its own, so the header receives Chat's send as
+ * a prop, as the empty state's prompts do: the send focuses the composer through a ref, in event
+ * handlers only, never while rendering.
+ */
+function ChatHeader({
+  render,
+  newChat,
+  actions,
+}: {
+  render: NonNullable<ChatProps<UIMessage>["header"]>;
+  newChat: ReactNode;
+  actions: ChatHeaderActions;
+}) {
+  return render(newChat, actions);
+}
 
 /**
  * Moves focus to the composer, except on touch devices, where focusing a textarea opens the
@@ -102,6 +151,14 @@ export function defaultHasContent<M extends UIMessage>(
  * renders the site header with New chat (or the bar a project passes as header), the
  * conversation, the banners, the composer and the screen-reader status line. A project changes
  * it through the props above, from its own components/app-chat.tsx.
+ *
+ * The approval seams (P2's spec §4.5, P2-21; for X-03): a server tool that needs a person's
+ * approval reaches the renderer as a card it answers through `respond`
+ * (addToolApprovalResponse), and once every card of the last step is answered useChat continues
+ * the same message on its own. While a card waits the composer is read-only, a header's send and
+ * the prompts do nothing, and the status line says "Approval needed". Regenerate never shows under
+ * a message that holds a person's approval, and Retry after a failed continuation continues the
+ * conversation instead of regenerating it (lib/chat/ui.ts).
  */
 export function Chat<M extends UIMessage = UIMessage>({
   modelLabel,
@@ -114,8 +171,11 @@ export function Chat<M extends UIMessage = UIMessage>({
   renderAssistant = renderPlainText,
   hasContent = defaultHasContent(renderAssistant),
   header,
+  approvalNotice: approvalNoticeProp,
+  onMessagesChange,
 }: ChatProps<M>) {
   const { locale, t } = useLocale();
+  const approvalNotice = approvalNoticeProp ?? t.status.approvalNeeded;
   const [annotations, setAnnotations] = useState<ReadonlyMap<string, MessageAnnotation>>(
     () => new Map(),
   );
@@ -129,20 +189,31 @@ export function Chat<M extends UIMessage = UIMessage>({
   // An IME composition is open somewhere on the page: its Enter must not send, its Esc not stop.
   const composing = useRef(false);
 
-  const { messages, status, error, sendMessage, regenerate, stop, setMessages, clearError } =
-    useChat<M>({
-      transport,
-      onFinish: (event) => {
-        const result = annotateFinish(event);
-        setInterrupted(result.interrupted);
-        const id = result.id;
-        if (id !== null && (result.stopped || result.cutOff)) {
-          setAnnotations((previous) =>
-            new Map(previous).set(id, { stopped: result.stopped, cutOff: result.cutOff }),
-          );
-        }
-      },
-    });
+  const {
+    messages,
+    status,
+    error,
+    sendMessage,
+    regenerate,
+    stop,
+    setMessages,
+    clearError,
+    addToolApprovalResponse,
+  } = useChat<M>({
+    transport,
+    // Continues the answer once the person has answered every card of its last step.
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    onFinish: (event) => {
+      const result = annotateFinish(event);
+      setInterrupted(result.interrupted);
+      const id = result.id;
+      if (id !== null && (result.stopped || result.cutOff)) {
+        setAnnotations((previous) =>
+          new Map(previous).set(id, { stopped: result.stopped, cutOff: result.cutOff }),
+        );
+      }
+    },
+  });
   const { scrollRef, contentRef, isFollowing, scrollToBottom } = useStickToBottom();
   // The hook takes the scroll container through a callback ref; Chat keeps its own handle
   // so that New chat can scroll back to the top.
@@ -159,12 +230,27 @@ export function Chat<M extends UIMessage = UIMessage>({
   // Send, Enter, Regenerate and Retry act only when the chat is idle.
   const canRequest = status === "ready" || status === "error";
   const atCap = maxMessages !== null && messages.length >= maxMessages;
+  // A card waits for the person's answer: nothing else may be sent until it is answered.
+  const awaiting = awaitsApproval(messages);
+  const canSend = canRequest && !atCap && !awaiting;
+  // Answered, and about to continue: the answer's calls still count as running.
+  const continuing = continuesAutomatically(messages, status, stoppedByUser);
   const slot = regenerateSlot(messages, status, stoppedByUser, hasContent);
   const errorKind: ChatErrorKind | null =
     status === "error" ? describeChatError(error) : interrupted ? "generic" : null;
+  const retry = retryAction(messages);
+
+  // The page sees the conversation as it changes; the latest callback, so it need not be stable.
+  const onMessagesChangeRef = useRef(onMessagesChange);
+  useEffect(() => {
+    onMessagesChangeRef.current = onMessagesChange;
+  });
+  useEffect(() => {
+    onMessagesChangeRef.current?.(messages);
+  }, [messages]);
 
   const send = (text: string): boolean => {
-    if (!canRequest || atCap || text.trim() === "") return false;
+    if (!canSend || text.trim() === "") return false;
     setStoppedByUser(false);
     setInterrupted(false);
     scrollToBottom();
@@ -182,6 +268,30 @@ export function Chat<M extends UIMessage = UIMessage>({
     scrollToBottom();
     void regenerate({ body: { locale } });
     focusUnlessTouch(inputRef.current);
+  };
+
+  // Retry after a failed request: a continuation continues, so nothing the person decided is
+  // dropped; anything else regenerates (lib/chat/ui.ts retryAction).
+  const retryFailed = () => {
+    if (!canRequest) return;
+    if (retry !== "continue") {
+      regen();
+      return;
+    }
+    setStoppedByUser(false);
+    setInterrupted(false);
+    scrollToBottom();
+    void sendMessage(undefined, { body: { locale } });
+  };
+
+  // The person's answer to a card. useChat sends it on its own once every card of the step is
+  // answered, with these options, so the continuation carries the interface language too.
+  const respond = ({ id, approved, reason }: ApprovalAnswer) => {
+    if (!canRequest) return;
+    setStoppedByUser(false);
+    setInterrupted(false);
+    scrollToBottom();
+    void addToolApprovalResponse({ id, approved, reason, options: { body: { locale } } });
   };
 
   const handleStop = useCallback(() => {
@@ -276,7 +386,7 @@ export function Chat<M extends UIMessage = UIMessage>({
           actions={newChatButton}
         />
       ) : (
-        header(newChatButton)
+        <ChatHeader render={header} newChat={newChatButton} actions={{ send, canSend }} />
       )}
 
       <main className="relative min-h-0 flex-1">
@@ -293,6 +403,9 @@ export function Chat<M extends UIMessage = UIMessage>({
               onRegenerate={regen}
               renderAssistant={renderAssistant}
               hasContent={hasContent}
+              continuing={continuing}
+              respond={respond}
+              canRespond={canRequest}
             />
           )}
         </div>
@@ -318,11 +431,19 @@ export function Chat<M extends UIMessage = UIMessage>({
           ) : (
             <Alert variant="destructive">
               <AlertDescription>{t.errors.generic}</AlertDescription>
-              <AlertAction>
-                <Button variant="outline" size="sm" className="pointer-coarse:h-11" onClick={regen}>
-                  {t.chat.retry}
-                </Button>
-              </AlertAction>
+              {/* None while a card waits: its answer continues the conversation. */}
+              {retry !== null && (
+                <AlertAction>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="pointer-coarse:h-11"
+                    onClick={retryFailed}
+                  >
+                    {t.chat.retry}
+                  </Button>
+                </AlertAction>
+              )}
             </Alert>
           )}
         </div>
@@ -331,7 +452,7 @@ export function Chat<M extends UIMessage = UIMessage>({
       <Composer
         inputRef={inputRef}
         busy={busy}
-        atCap={atCap}
+        readOnlyNotice={atCap ? t.composer.capNotice : awaiting ? approvalNotice : null}
         composing={composing}
         onSend={send}
         onStop={handleStop}

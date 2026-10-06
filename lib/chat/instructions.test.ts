@@ -123,6 +123,17 @@ describe("buildInstructions", () => {
     expect(paragraphs(withLine).at(-1)).toBe(INTERFACE_LINES[locale]);
   });
 
+  // The card shows the agent's reason and note as the English record they are (lang="en"), and the
+  // eval's required phrases are English (P2's spec §4.6, §5).
+  it("keeps a call's reason and note in English, whatever the interface language", () => {
+    const rule = paragraphs(buildInstructions({ locale: "pt-BR" })).find((block) =>
+      block.startsWith("Language:"),
+    );
+    expect(rule).toContain(
+      "Write the reason and the note of a tool call in English, whatever the interface language: they are the store's records.",
+    );
+  });
+
   it("puts the language rule before the interface line it points to", () => {
     const blocks = paragraphs(buildInstructions({ locale: "pt-BR" }));
     const rule = blocks.findIndex((block) => block.startsWith("Language:"));

@@ -11,28 +11,33 @@
  */
 export const CHAT_PATH = "/requests/r01";
 
-/** The suggested prompts of lib/i18n/messages.ts, in order. */
+/**
+ * The suggested prompts of lib/i18n/messages.ts, in order: an operator's questions about the
+ * request, which the mock answers with its default text (P2's spec §1 item 2).
+ */
 export const PROMPTS_EN = [
-  "Explain streaming in one paragraph.",
-  "What can you help me with?",
-  "Write a haiku about testing.",
-  "List three benefits of small projects.",
+  "What does the customer ask for?",
+  "Which policy applies here?",
+  "What can you change for this customer?",
+  "What do you check before proposing a change?",
 ] as const;
 export const PROMPTS_PT = [
-  "Explique streaming em um parágrafo.",
-  "Em que você pode me ajudar?",
-  "Escreva um haicai sobre testes.",
-  "Liste três vantagens de projetos pequenos.",
+  "O que o cliente pede?",
+  "Qual política se aplica aqui?",
+  "O que você pode alterar para este cliente?",
+  "O que você verifica antes de propor uma alteração?",
 ] as const;
 
-/** The empty state's title and subtitle (empty.title, empty.subtitle). */
+/** The agent panel's empty state: its title and subtitle (empty.title, empty.subtitle). */
 export const EMPTY_EN = {
-  title: "Chat with the model",
-  subtitle: "Starting point: replace this text, the prompts and the instructions.",
+  title: "Work on this request with the agent",
+  subtitle:
+    "Press Handle this request: the agent reads the request, then proposes one action on a card, and nothing changes until you approve it. Each approval or rejection sends one more message, so approvals count toward the hourly limit.",
 } as const;
 export const EMPTY_PT = {
-  title: "Converse com o modelo",
-  subtitle: "Ponto de partida: troque este texto, os prompts e as instruções.",
+  title: "Trabalhe nesta solicitação com o agente",
+  subtitle:
+    "Use Tratar esta solicitação: o agente lê a solicitação e propõe uma ação num cartão, e nada muda até você aprovar. Cada aprovação ou rejeição envia mais uma mensagem, então aprovações contam no limite por hora.",
 } as const;
 
 /**
@@ -57,6 +62,16 @@ export const TOOL_INPUT_TEXT = "{}";
 export const TOOL_OUTPUT_TEXT = '"name": "Sofia Ramirez"';
 export const TOOL_ANSWER =
   "Request r01 is from Sofia Ramirez, who has 3 orders. Ask me to handle it when you are ready.";
+
+/**
+ * The request page's button, which sends its message as the person's (P2's spec §1 item 2), and
+ * the line above the read-only composer while a card waits (spec §4.5), in each language.
+ */
+export const HANDLE_EN = "Handle this request";
+export const HANDLE_PT = "Tratar esta solicitação";
+export const HANDLE_MESSAGE_EN = "Handle this request.";
+export const WAITING_EN = "Approve or reject the card above";
+export const WAITING_PT = "Aprove ou rejeite o cartão acima";
 
 // The texts that carry the hourly limit, with RATE_LIMIT_PER_HOUR pinned to 20 in
 // playwright.config.ts. LIMIT_TEXT_EN is also what rateLimitResponse() sends (template spec §5.3).

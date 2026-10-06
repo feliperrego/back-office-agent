@@ -38,9 +38,11 @@ function rules(): string {
     "Length: keep each reply short, one to three sentences and about 60 words at most. " +
       `If the person explicitly asks for more, follow that request, up to about ${maxWords()} words, which is the most this chat can return. ` +
       "Longer or shorter answers still follow the plain-text rules above.",
-    // P2's spec §4.6: the agent answers in the interface language.
+    // P2's spec §4.6: the agent answers in the interface language; a call's reason and note stay
+    // English, the store's records, which the card shows marked English.
     "Language: write to the person in the interface language stated at the end of these instructions, or in English if none is stated. " +
-      "Keep the store's data as the tools give it: order numbers, item names, sizes and codes.",
+      "Keep the store's data as the tools give it: order numbers, item names, sizes and codes. " +
+      "Write the reason and the note of a tool call in English, whatever the interface language: they are the store's records.",
     `Today is ${TODAY}. Every change you make is dated today.`,
     "How to work: call readRequest first. It returns the request, the customer's orders as they are now, and facts code computed for each order: " +
       "the day of its return window and whether the window is open, whether the order can still change, the first day it counts as late, and the last day of its warranty. " +

@@ -3,6 +3,7 @@ import { READ_TOOL, type ProposedCall } from "@/lib/sandbox/calls";
 import { REQUESTS, requestById } from "@/lib/sandbox/requests";
 import { apply, check, openSandbox, orderOf } from "@/lib/sandbox/sandbox";
 import { storeData } from "@/lib/store/customers";
+import { messages } from "@/lib/i18n/messages";
 import { readRequestOutput } from "@/lib/tools";
 import {
   DENIED_ANSWER,
@@ -21,6 +22,8 @@ import { DEFAULT_MOCK_TEXT, type MockPrompt, type MockTurn } from "./mock-steps"
 
 const HANDLE = "Handle this request.";
 const READ = "Read this request.";
+// What the request page's button sends in Portuguese (P2's spec §4.6): the mock plays the same plan.
+const HANDLE_PT = "Trate esta solicitação.";
 
 function turn(message: string, prompt: MockPrompt = [], toolCallId = "mock-call-1"): MockTurn {
   return { prompt, message, toolCallId };
@@ -105,14 +108,22 @@ describe("MOCK_PLANS", () => {
 });
 
 describe("MOCK_SCENARIOS.firstStep", () => {
-  it.each([HANDLE, READ, "handle THIS request, please"])("reads the request for %j", (message) => {
-    expect(MOCK_SCENARIOS.firstStep(turn(message, [], "mock-call-3"))).toEqual({
-      kind: "tool-call",
-      toolCallId: "mock-call-3",
-      toolName: READ_TOOL,
-      input: {},
-    });
+  it("hears what the request page's button sends, in each language", () => {
+    expect(messages.en.request.handleMessage).toBe(HANDLE);
+    expect(messages["pt-BR"].request.handleMessage).toBe(HANDLE_PT);
   });
+
+  it.each([HANDLE, READ, "handle THIS request, please", HANDLE_PT, "trate ESTA solicitação"])(
+    "reads the request for %j",
+    (message) => {
+      expect(MOCK_SCENARIOS.firstStep(turn(message, [], "mock-call-3"))).toEqual({
+        kind: "tool-call",
+        toolCallId: "mock-call-3",
+        toolName: READ_TOOL,
+        input: {},
+      });
+    },
+  );
 
   it("gives any other message the default answer", () => {
     expect(MOCK_SCENARIOS.firstStep(turn("Tell me something"))).toEqual({
@@ -145,12 +156,14 @@ describe("MOCK_SCENARIOS.afterTool", () => {
     "plays %s's plan after reading it for Handle this request",
     (id) => {
       const reading = readRequestOutput(openSandbox(id));
-      expect(
-        MOCK_SCENARIOS.afterTool(
-          { toolName: READ_TOOL, value: reading },
-          turn(HANDLE, [], "mock-call-2"),
-        ),
-      ).toEqual({ kind: "tool-call", ...planCall(id) });
+      for (const message of [HANDLE, HANDLE_PT]) {
+        expect(
+          MOCK_SCENARIOS.afterTool(
+            { toolName: READ_TOOL, value: reading },
+            turn(message, [], "mock-call-2"),
+          ),
+        ).toEqual({ kind: "tool-call", ...planCall(id) });
+      }
     },
   );
 

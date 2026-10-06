@@ -8,11 +8,24 @@ import { messageText } from "@/lib/trace/message-text";
 /** What onFinish recorded for a message id. */
 export type MessageAnnotation = { stopped: boolean; cutOff: boolean };
 
+/** A person's answer to a card: its approval id (not the call's), and the decision. */
+export type ApprovalAnswer = { id: string; approved: boolean; reason?: string };
+
 export type AssistantRenderOptions = {
-  /** The message is still streaming. */
+  /**
+   * The message is still streaming, or answered and about to continue on its own: a call still
+   * running is not cut off yet.
+   */
   streaming: boolean;
   /** The caption row (Stopped, Cut, Regenerate), or null. The renderer places it last. */
   caption: ReactNode;
+  /**
+   * Answers a card, a tool call waiting for the person's approval (P2's spec §4.5): useChat's
+   * addToolApprovalResponse, which continues the answer once every card of its step is answered.
+   */
+  respond: (answer: ApprovalAnswer) => void;
+  /** Whether an answer would go now: the chat is idle. A card's buttons wait while it is not. */
+  canRespond: boolean;
 };
 
 /**
@@ -36,6 +49,10 @@ type MessageListProps<M extends UIMessage> = {
   renderAssistant: AssistantRenderer<M>;
   /** Whether an assistant message has anything to show; the same predicate as the slot's. */
   hasContent: (message: M) => boolean;
+  /** Answered, and about to continue on its own (lib/chat/ui.ts continuesAutomatically). */
+  continuing: boolean;
+  respond: (answer: ApprovalAnswer) => void;
+  canRespond: boolean;
 };
 
 const REGENERATE_CLASS = "h-auto px-0 py-1 pointer-coarse:min-h-11";
@@ -53,6 +70,9 @@ export function MessageList<M extends UIMessage>({
   onRegenerate,
   renderAssistant,
   hasContent,
+  continuing,
+  respond,
+  canRespond,
 }: MessageListProps<M>) {
   const { t } = useLocale();
   const lastId = messages.at(-1)?.id;
@@ -97,7 +117,12 @@ export function MessageList<M extends UIMessage>({
 
         return (
           <Fragment key={message.id}>
-            {renderAssistant(message, { streaming: busy && message.id === lastId, caption })}
+            {renderAssistant(message, {
+              streaming: (busy || continuing) && message.id === lastId,
+              caption,
+              respond,
+              canRespond,
+            })}
           </Fragment>
         );
       })}

@@ -30,7 +30,11 @@ export type ShellMessages = {
   };
   chat: { jump: string; retry: string; rateNote: string };
   errors: { generic: string; limit: string };
-  status: { complete: string; stopped: string; failed: string };
+  /**
+   * The screen-reader status line once a request is over; approvalNeeded while a card waits for
+   * the person's answer (P2's spec §4.5).
+   */
+  status: { complete: string; stopped: string; failed: string; approvalNeeded: string };
   footer: { builtBy: string; source: string };
   /**
    * A tool call's chip (template spec §5.10): the label of a tool the project names no label for,
@@ -155,6 +159,7 @@ export const shellMessages: Record<Locale, ShellMessages> = {
       complete: "Response complete",
       stopped: "Response stopped",
       failed: "Response failed",
+      approvalNeeded: "Approval needed",
     },
     footer: { builtBy: "Built by", source: "Source on GitHub" },
     toolCall: {
@@ -266,6 +271,7 @@ export const shellMessages: Record<Locale, ShellMessages> = {
       complete: "Resposta concluída",
       stopped: "Resposta interrompida",
       failed: "Falha na resposta",
+      approvalNeeded: "Aprovação necessária",
     },
     footer: { builtBy: "Feito por", source: "Código no GitHub" },
     toolCall: {

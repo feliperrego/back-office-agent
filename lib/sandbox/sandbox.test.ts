@@ -6,6 +6,7 @@ import { REQUEST_IDS } from "./requests";
 import {
   DENIAL_CODES,
   SandboxDenied,
+  deniedCodeOf,
   apply,
   check,
   customerOf,
@@ -449,5 +450,20 @@ describe("apply", () => {
     expect(storeData.customers.flatMap((c) => c.orders).some((o) => o.returnAuthorization)).toBe(
       false,
     );
+  });
+});
+
+// The browser reads a refused write's tool error back into its code, for the "Blocked by policy"
+// line (lib/approval/tool-calls.ts).
+describe("deniedCodeOf", () => {
+  it("reads every code back from a SandboxDenied's message", () => {
+    for (const code of DENIAL_CODES)
+      expect(deniedCodeOf(new SandboxDenied(code).message)).toBe(code);
+  });
+
+  it("reads nothing from any other text", () => {
+    expect(deniedCodeOf("Couldn't get a response.")).toBeNull();
+    expect(deniedCodeOf("Denied by the sandbox's policy: made-up")).toBeNull();
+    expect(deniedCodeOf("outside-window")).toBeNull();
   });
 });

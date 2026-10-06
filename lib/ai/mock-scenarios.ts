@@ -15,8 +15,11 @@ import { DEFAULT_MOCK_TEXT, type MockPrompt, type MockScenarios } from "./mock-s
  * phrase (measurements/cases.json), so the mock eval passes every case (lib/eval/project.test.ts).
  */
 
-/** The message that starts the work (P2's spec §1, "Handle this request"). */
-export const HANDLE_CUE = /\bhandle this request\b/i;
+/**
+ * The message that starts the work (P2's spec §1, "Handle this request"), as the request page's
+ * button sends it in English and in Portuguese (request.handleMessage).
+ */
+export const HANDLE_CUE = /\bhandle this request\b|\btrate esta solicitação/i;
 
 /** The message that reads the request and does nothing else: the shell's tool e2e asks it. */
 export const READ_CUE = /\bread this request\b/i;

@@ -16,7 +16,17 @@ const CAPTION = createElement("p", { "data-caption": "" });
 
 function render(message: UIMessage, streaming = false): string {
   return renderToStaticMarkup(
-    createElement(LocaleProvider, null, renderPlainText(message, { streaming, caption: CAPTION })),
+    createElement(
+      LocaleProvider,
+      null,
+      // The default renderer shows no card, so it never answers one.
+      renderPlainText(message, {
+        streaming,
+        caption: CAPTION,
+        respond: () => {},
+        canRespond: true,
+      }),
+    ),
   );
 }
 

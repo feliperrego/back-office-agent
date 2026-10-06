@@ -3,6 +3,7 @@ import {
   type ChatOnFinishCallback,
   type ChatStatus,
   isToolUIPart,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
   type UIMessage,
 } from "ai";
 import { messageText } from "@/lib/trace/message-text";
@@ -39,7 +40,10 @@ export type ChatErrorKind = "limit" | "generic";
 export type RegenerateSlot = "after-answer" | "stopped-row" | null;
 
 /** What the screen-reader status line says; each value is a key of the `status` strings. */
-export type Announcement = "complete" | "stopped" | "failed";
+export type Announcement = "complete" | "stopped" | "failed" | "approvalNeeded";
+
+/** What Retry does after a failed request; null when a card waits, whose answer continues. */
+export type RetryAction = "continue" | "regenerate" | null;
 
 /** True while a request is in flight. */
 export function isBusy(status: ChatStatus): boolean {
@@ -146,10 +150,95 @@ export function describeChatError(error: unknown): ChatErrorKind {
 }
 
 /**
+ * A tool part's approval, when it has one: a server tool that needs a person's answer
+ * (`toolApproval` on the server, ai 7.0.114) carries it from its card to its end. One the server
+ * decided by itself carries isAutomatic and never asked anyone.
+ */
+function approvalOf(
+  part: UIMessage["parts"][number],
+): { id: string; approved?: boolean; isAutomatic?: boolean } | undefined {
+  if (!isToolUIPart(part) || !("approval" in part)) return undefined;
+  return part.approval ?? undefined;
+}
+
+/**
+ * The approvals a person still has to answer in a message, by approval id (the id that
+ * addToolApprovalResponse takes, not the call's): its cards. A decision the server took by itself
+ * is never one (P2's spec §4.5).
+ */
+export function pendingApprovals(message: UIMessage): string[] {
+  return message.parts.flatMap((part) => {
+    const approval = approvalOf(part);
+    return isToolUIPart(part) &&
+      part.state === "approval-requested" &&
+      approval !== undefined &&
+      approval.isAutomatic !== true
+      ? [approval.id]
+      : [];
+  });
+}
+
+/**
+ * Whether a card waits for the person: the conversation's last message is an assistant message
+ * with an approval to answer. A later message leaves a card behind, unanswered, and the history
+ * drops it (P2's spec §4.3), so only the last message counts. While it waits the composer is
+ * read-only and Regenerate hidden; its answer continues the same message (P2's spec §4.5).
+ */
+export function awaitsApproval<M extends UIMessage>(messages: M[]): boolean {
+  const last = messages.at(-1);
+  return last?.role === "assistant" && pendingApprovals(last).length > 0;
+}
+
+/**
+ * Whether a message holds a person's approval: a card that waits, one answered, or the call it
+ * decided, run or refused. Regenerate replaces the last answer, so under such a message it would
+ * erase a decision from the conversation, which is the audit log (P2's spec §2, §4.5).
+ */
+export function holdsApproval(message: UIMessage): boolean {
+  return message.parts.some((part) => {
+    const approval = approvalOf(part);
+    return approval !== undefined && approval.isAutomatic !== true;
+  });
+}
+
+/**
+ * What Retry does after a failed request (P2's spec §4.5). A request that continued after an
+ * answer (a 429, a lost connection, a timeout) leaves the answer, or the call it ran, in the last
+ * message: Retry continues that message, so nothing the person decided is dropped. While a card
+ * waits there is nothing to retry: its answer continues the conversation. Otherwise Retry
+ * regenerates, as it always did.
+ */
+export function retryAction<M extends UIMessage>(messages: M[]): RetryAction {
+  if (awaitsApproval(messages)) return null;
+  const last = messages.at(-1);
+  return last?.role === "assistant" && holdsApproval(last) ? "continue" : "regenerate";
+}
+
+/**
+ * Whether the chat is about to continue on its own: idle, with every card of the last message's
+ * last step answered (useChat's sendAutomaticallyWhen,
+ * lastAssistantMessageIsCompleteWithApprovalResponses). Between the answer and that request
+ * useChat is ready for a moment, so the answer's calls still count as running rather than
+ * settling as not finished. Never after a Stop or an error: useChat sends nothing then.
+ */
+export function continuesAutomatically<M extends UIMessage>(
+  messages: M[],
+  status: ChatStatus,
+  stoppedByUser: boolean,
+): boolean {
+  return (
+    status === "ready" &&
+    !stoppedByUser &&
+    lastAssistantMessageIsCompleteWithApprovalResponses({ messages })
+  );
+}
+
+/**
  * Where the single Regenerate button goes, or null for nowhere.
  * - "after-answer": under the final message, an assistant message with content.
  * - "stopped-row": in the "Stopped before a response" row, only after a user Stop,
  *   when the final message is a user message or an assistant message without content.
+ * Never under a message that holds a person's approval (holdsApproval).
  */
 export function regenerateSlot<M extends UIMessage>(
   messages: M[],
@@ -160,6 +249,7 @@ export function regenerateSlot<M extends UIMessage>(
   if (isBusy(status)) return null;
   const last = messages.at(-1);
   if (last === undefined) return null;
+  if (last.role === "assistant" && holdsApproval(last)) return null;
   if (last.role === "assistant" && hasContent(last)) return "after-answer";
   // The final message is a user message, or an assistant message with no content.
   return stoppedByUser && last.role !== "system" ? "stopped-row" : null;
@@ -197,7 +287,8 @@ export function showTypingIndicator<M extends UIMessage>(
 /**
  * What the polite status line announces once a request is over; tokens are never read aloud.
  * Nothing while busy. Then "failed" while an error banner shows, "stopped" after a user Stop,
- * "complete" when the final message is an assistant message with content, else null.
+ * "approvalNeeded" while a card waits (P2's spec §4.5), "complete" when the final message is an
+ * assistant message with content, else null.
  */
 export function announcement<M extends UIMessage>(
   {
@@ -217,6 +308,7 @@ export function announcement<M extends UIMessage>(
   if (isBusy(status)) return null;
   if (failed) return "failed";
   if (stoppedByUser) return "stopped";
+  if (awaitsApproval(messages)) return "approvalNeeded";
   const last = messages.at(-1);
   return last?.role === "assistant" && hasContent(last) ? "complete" : null;
 }

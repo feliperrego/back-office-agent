@@ -1,6 +1,6 @@
 "use client";
 
-import { Info, Menu } from "lucide-react";
+import { ExternalLink, Info, Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useId } from "react";
@@ -24,6 +24,7 @@ import {
 import type { Localized } from "@/lib/i18n/localized";
 import { PRODUCT_NAME } from "@/lib/project";
 import type { SiteHeaderValues } from "@/lib/site-header";
+import { bannerParts } from "./banner";
 import { isCurrent, type NavItem } from "./nav";
 
 export type { NavItem } from "./nav";
@@ -37,6 +38,11 @@ export type AppShellProps = SiteHeaderValues & {
   actions?: ReactNode;
   /** A note on every page, such as "the data is fictional". */
   banner?: Localized;
+  /**
+   * One link inside the banner, placed where its sentence says {link} (P2's spec §1: P1's
+   * assistant, where some requests came from); a sentence without {link} shows no link.
+   */
+  bannerLink?: { href: string; label: Localized };
   children: ReactNode;
 };
 
@@ -129,8 +135,18 @@ const ALWAYS = () => {};
  * with siteHeaderProps() and the project's words in every language. It imports nothing of the
  * chat, so a project without a chat keeps it (template spec §9 step 6b).
  */
-export function AppShell({ brand, nav, actions, banner, children, ...header }: AppShellProps) {
+export function AppShell({
+  brand,
+  nav,
+  actions,
+  banner,
+  bannerLink,
+  children,
+  ...header
+}: AppShellProps) {
   const { locale } = useLocale();
+  const parts =
+    banner === undefined || bannerLink === undefined ? null : bannerParts(banner[locale]);
   return (
     <SidebarProvider open onOpenChange={ALWAYS}>
       <ShellSidebar brand={brand} nav={nav} />
@@ -151,7 +167,21 @@ export function AppShell({ brand, nav, actions, banner, children, ...header }: A
             className="flex shrink-0 items-start gap-2 border-b bg-amber-50 px-4 py-1.5 text-xs text-amber-950 dark:bg-amber-950/30 dark:text-amber-100"
           >
             <Info className="mt-px size-3.5 shrink-0" />
-            <span>{banner[locale]}</span>
+            {parts === null || bannerLink === undefined ? (
+              <span>{banner[locale]}</span>
+            ) : (
+              <span>
+                {parts.before}
+                <a
+                  href={bannerLink.href}
+                  className="inline-flex items-center gap-0.5 font-medium underline underline-offset-2 pointer-coarse:py-3.5"
+                >
+                  {bannerLink.label[locale]}
+                  <ExternalLink className="size-3 shrink-0" />
+                </a>
+                {parts.after}
+              </span>
+            )}
           </p>
         )}
         <main className="flex min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-y-auto">

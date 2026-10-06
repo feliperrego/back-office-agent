@@ -93,12 +93,25 @@ export type DenialCode = (typeof DENIAL_CODES)[number];
 
 export type Decision = { allowed: true; call: WriteCall } | { allowed: false; code: DenialCode };
 
+/** How a SandboxDenied's message starts; its code follows. */
+const DENIED_PREFIX = "Denied by the sandbox's policy: ";
+
 /** Thrown by apply() for a write the gate denies: a tool error, never a silent change. */
 export class SandboxDenied extends Error {
   constructor(readonly code: DenialCode) {
-    super(`Denied by the sandbox's policy: ${code}`);
+    super(`${DENIED_PREFIX}${code}`);
     this.name = "SandboxDenied";
   }
+}
+
+/**
+ * The code of a SandboxDenied's message, as a refused write's tool error carries it to the
+ * browser (lib/agent/pipeline.ts), or null for any other text.
+ */
+export function deniedCodeOf(text: string): DenialCode | null {
+  if (!text.startsWith(DENIED_PREFIX)) return null;
+  const code = text.slice(DENIED_PREFIX.length);
+  return (DENIAL_CODES as readonly string[]).includes(code) ? (code as DenialCode) : null;
 }
 
 /** A request's sandbox before any write: a copy of the seed, the request open. */

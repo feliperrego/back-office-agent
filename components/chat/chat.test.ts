@@ -70,6 +70,62 @@ describe("Chat's header", () => {
   });
 });
 
+// The header that can send (P2's spec §4.5, P2-11): a page's own button, such as "Handle this
+// request", sends through Chat as a prompt does, and is told when Chat can take a request.
+describe("Chat's header actions", () => {
+  it("receive a send and whether Chat can take a request: an idle, empty chat can", () => {
+    let received: unknown = null;
+    renderToStaticMarkup(
+      createElement(
+        LocaleProvider,
+        null,
+        createElement(Chat, {
+          ...PROPS,
+          header: (newChat, chat) => {
+            received = chat;
+            return createElement("div", null, newChat);
+          },
+        }),
+      ),
+    );
+    const chat = received as { send?: unknown; canSend?: unknown };
+    expect(typeof chat.send).toBe("function");
+    expect(chat.canSend).toBe(true);
+  });
+});
+
+// The approval seams (P2's spec §4.5, P2-21), which P2's e2e drives in the browser
+// (e2e/approval.spec.ts). Chat runs them in a client component the node tests cannot mount, so
+// the source pins the wiring, as the hasContent test below does.
+describe("Chat's approval seams", () => {
+  const source = readFileSync("components/chat/chat.tsx", "utf8");
+
+  it("continue on their own once every card of the last step is answered", () => {
+    expect(source).toMatch(
+      /useChat<M>\(\{[\s\S]*sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,/,
+    );
+  });
+
+  it("answer a card with the interface language, which the continuation carries", () => {
+    expect(source).toMatch(
+      /addToolApprovalResponse\(\{ id, approved, reason, options: \{ body: \{ locale \} \} \}\)/,
+    );
+  });
+
+  it("make Retry continue the conversation after a failed continuation", () => {
+    expect(source).toMatch(/const retry = retryAction\(messages\);/);
+    // Regenerate only when retryAction says so; a continuation sends the history as it is.
+    expect(source).toMatch(
+      /if \(retry !== "continue"\) \{\s*regen\(\);\s*return;\s*\}[\s\S]*?void sendMessage\(undefined, \{ body: \{ locale \} \}\);/,
+    );
+    expect(source).toMatch(/onClick=\{retryFailed\}/);
+  });
+
+  it("make the composer read-only, with the project's line, while a card waits", () => {
+    expect(source).toMatch(/atCap \? t\.composer\.capNotice : awaiting \? approvalNotice : null/);
+  });
+});
+
 describe("Chat's default hasContent", () => {
   /** An answer that so far holds only a tool call: a chip for the default renderer, no text. */
   const toolOnly: UIMessage = {
