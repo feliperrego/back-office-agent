@@ -6,7 +6,7 @@ import { itemIdOf } from "@/lib/ai/mock-scenarios";
 import { DEFAULT_MOCK_TEXT, resetMockScenarios } from "@/lib/ai/mock-steps";
 import { format } from "@/lib/i18n/format";
 import { LOCALES } from "@/lib/i18n/locale";
-import { SAMPLE_ITEMS, SAMPLE_TOOL_NAME, TOOLS } from "@/lib/tools";
+import { SAMPLE_ITEMS, SAMPLE_TOOL_NAME, SAMPLE_TOOLS } from "@/lib/sample-tool";
 import { readCaseSet } from "./cases";
 import { CHECK_IDS, EVAL_PROJECT, EVALS_PAGE, type SampleCase, type SampleResult } from "./project";
 import { readShownRun } from "./runs";
@@ -52,7 +52,7 @@ describe("the sample cases", () => {
     expect(cases.map(({ id }) => id)).toEqual(["c01", "c02", "c03"]);
     expect(cases.filter(({ expected }) => expected.tools.length > 0)).toHaveLength(1);
     for (const { expected } of cases) {
-      for (const name of expected.tools) expect(Object.keys(TOOLS)).toContain(name);
+      for (const name of expected.tools) expect(Object.keys(SAMPLE_TOOLS)).toContain(name);
       expect(expected.replyMentions.length).toBeGreaterThan(0);
     }
   });

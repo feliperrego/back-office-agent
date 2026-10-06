@@ -6,9 +6,10 @@
 /**
  * The route where the chat fills the page, which the chat specs open. Their helpers search the
  * whole page, so it holds the chat alone: a project whose "/" is another page, with the chat in a
- * panel there, points this at its full-page chat route (template spec §5.8).
+ * panel there, points this at its full-page chat route (template spec §5.8). P2's is the first
+ * request's page (P2's spec §4.7).
  */
-export const CHAT_PATH = "/";
+export const CHAT_PATH = "/requests/r01";
 
 /** The suggested prompts of lib/i18n/messages.ts, in order. */
 export const PROMPTS_EN = [
@@ -45,15 +46,17 @@ export const FULL_DEFAULT_ANSWER =
  * A message that makes the mock call the project's tool (lib/ai/mock-scenarios.ts, lib/tools.ts),
  * and what the chat then shows: the tool's name (data-tool), the chip's label in both languages,
  * a line of the call's input and of its output as their JSON shows them, and the answer the mock
- * gives from the result (template spec §5.10).
+ * gives from the result (template spec §5.10). P2's read: readRequest takes no input, and reads
+ * the request of CHAT_PATH (P2's spec §4.1, §4.7); it needs no approval, so no card shows.
  */
-export const TOOL_PROMPT = "What is the status of item ITM-0042?";
-export const TOOL_NAME = "lookUpItem";
-export const TOOL_LABEL_EN = "Item lookup: ITM-0042";
-export const TOOL_LABEL_PT = "Consulta do item ITM-0042";
-export const TOOL_INPUT_TEXT = '"itemId": "ITM-0042"';
-export const TOOL_OUTPUT_TEXT = '"name": "Brass desk lamp"';
-export const TOOL_ANSWER = "Item ITM-0042 (Brass desk lamp) is available.";
+export const TOOL_PROMPT = "Read this request.";
+export const TOOL_NAME = "readRequest";
+export const TOOL_LABEL_EN = "Request lookup: r01";
+export const TOOL_LABEL_PT = "Consulta da solicitação r01";
+export const TOOL_INPUT_TEXT = "{}";
+export const TOOL_OUTPUT_TEXT = '"name": "Sofia Ramirez"';
+export const TOOL_ANSWER =
+  "Request r01 is from Sofia Ramirez, who has 3 orders. Ask me to handle it when you are ready.";
 
 // The texts that carry the hourly limit, with RATE_LIMIT_PER_HOUR pinned to 20 in
 // playwright.config.ts. LIMIT_TEXT_EN is also what rateLimitResponse() sends (template spec §5.3).

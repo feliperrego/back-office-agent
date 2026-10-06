@@ -56,3 +56,18 @@ export function requestById(id: string): RequestRecord {
   if (!request) throw new Error(`Unknown request: ${id}`);
   return request;
 }
+
+/** The plain-text body of the 400 for a missing or unknown requestId. Honest clients never see it. */
+export const REQUEST_ID_ERROR =
+  "Invalid request: requestId must be the id of one of the demo's requests.";
+
+/**
+ * The request a chat body names (spec §4.3): P2's transport sends its id as `requestId`, and the
+ * route accepts only one of REQUEST_IDS exactly, so the model never chooses a request. Null for
+ * anything else.
+ */
+export function requestIdOf(body: unknown): string | null {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return null;
+  const { requestId } = body as { requestId?: unknown };
+  return isRequestId(requestId) ? requestId : null;
+}

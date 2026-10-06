@@ -9,9 +9,11 @@
 export const MAX_OUTPUT_TOKENS = 1024;
 
 /**
- * Most model calls in one answer, for a model that calls tools over several steps
+ * Most model calls in one request, for a model that calls tools over several steps
  * (stopWhen: isStepCount(MAX_STEPS)): a tool call takes one, and the answer after its result
- * another. With MAX_OUTPUT_TOKENS per call, one answer's output stays under MAX_STEPS times the
- * cap.
+ * another. A call waiting for a person's approval ends the request, and the continuation after
+ * the answer is a request of its own, with MAX_STEPS again (P2's spec §4.8; ai stream-text.ts).
+ * So with MAX_OUTPUT_TOKENS per call, one answer's output stays under (approvals + 1) times
+ * MAX_STEPS times the cap.
  */
 export const MAX_STEPS = 5;

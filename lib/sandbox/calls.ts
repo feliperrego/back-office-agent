@@ -61,29 +61,47 @@ export const SHOE_SIZES: readonly string[] = Array.from({ length: 21 }, (_, inde
   String(5 + index / 2),
 );
 
+const orderIdField = z.string().min(1).max(40).describe('The order number, such as "AO-10468".');
+const reasonField = z
+  .string()
+  .min(1)
+  .max(300)
+  .describe("Why this change, in one sentence, for the person who approves it.");
+
 /**
  * The writes' inputs (spec §4.1). No amount, destination or order lines: code computes the
  * refund from the order (B3, B4) and builds the new variant from the old one (B5). Strict, so an
  * extra field is an error rather than dropped; no transforms, so the SDK's re-validation of an
- * approved input sees the input unchanged (ai validate-tool-approvals.ts).
+ * approved input sees the input unchanged (ai validate-tool-approvals.ts). The descriptions are
+ * what the model reads of each field (lib/tools.ts); they change no value.
  */
 export const WRITE_INPUTS = {
-  authorizeReturn: z
-    .object({ orderId: z.string().min(1).max(40), reason: z.string().min(1).max(300) })
-    .strict(),
+  authorizeReturn: z.object({ orderId: orderIdField, reason: reasonField }).strict(),
   changeItem: z
     .object({
-      orderId: z.string().min(1).max(40),
-      item: z.string().min(1).max(120),
-      newSize: z.string().min(1).max(20),
-      reason: z.string().min(1).max(300),
+      orderId: orderIdField,
+      item: z
+        .string()
+        .min(1)
+        .max(120)
+        .describe("The item's name exactly as readRequest lists it in the order."),
+      newSize: z.string().min(1).max(20).describe('The new size only, such as "L" or "8.5".'),
+      reason: reasonField,
     })
     .strict(),
   closeRequest: z
     .object({
-      outcome: z.enum(OUTCOMES),
-      code: z.enum(ALL_CLOSE_CODES),
-      note: z.string().min(1).max(500),
+      outcome: z
+        .enum(OUTCOMES)
+        .describe(
+          "answered: the policies or the order data answer it; declined: the policy says no; manual: a person must act, since no tool does.",
+        ),
+      code: z.enum(ALL_CLOSE_CODES).describe("Why: a code of the outcome's closed list."),
+      note: z
+        .string()
+        .min(1)
+        .max(500)
+        .describe("For answered, the answer; otherwise why, in one or two sentences."),
     })
     .strict(),
 } satisfies Record<WriteToolName, z.ZodTypeAny>;

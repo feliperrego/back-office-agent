@@ -1,3 +1,4 @@
+import { normalizeOrderId } from "@/lib/sandbox/calls";
 import { stringField, type ToolView } from "@/lib/trace/tool-view";
 import { format } from "./format";
 import type { Locale } from "./locale";
@@ -15,10 +16,24 @@ export type ProjectMessages = {
    * Each of the project's tools as its chip names it (toolLabel below). The chip adds the call's
    * state after the label ("Working", "Waiting for approval", "The tool failed", "Denied", "Not
    * finished"), so a label must read correctly next to every one of them: it names the call, as
-   * a noun, and never says what the call did. `lookUpItemWithId` adds the item, `{id}`, once the
-   * input has streamed it; until then the chip shows `lookUpItem`.
+   * a noun, and never says what the call did (W-P22), and in pt-BR a feminine noun, to agree with
+   * "Negada" and "Não concluída". A write's label adds its order, `{order}`, once the input has
+   * streamed it; readRequest's and closeRequest's add the request, `{id}`, once their output holds
+   * it (P2's spec §4.1). `lookUpItem` is the template sample eval's tool (lib/sample-tool.ts),
+   * labelled until P2's eval replaces that sample.
    */
-  toolLabels: { lookUpItem: string; lookUpItemWithId: string };
+  toolLabels: {
+    readRequest: string;
+    readRequestWithId: string;
+    authorizeReturn: string;
+    authorizeReturnWithOrder: string;
+    changeItem: string;
+    changeItemWithOrder: string;
+    closeRequest: string;
+    closeRequestWithId: string;
+    lookUpItem: string;
+    lookUpItemWithId: string;
+  };
   /**
    * The project's words in the app shell (app/(shell)/layout.tsx, template spec §5.12): the nav
    * item of the home page, the tagline under the product name, and the banner on every page.
@@ -52,7 +67,18 @@ export const projectMessages: Record<Locale, ProjectMessages> = {
       "Write a haiku about testing.",
       "List three benefits of small projects.",
     ],
-    toolLabels: { lookUpItem: "Item lookup", lookUpItemWithId: "Item lookup: {id}" },
+    toolLabels: {
+      readRequest: "Request lookup",
+      readRequestWithId: "Request lookup: {id}",
+      authorizeReturn: "Return authorization",
+      authorizeReturnWithOrder: "Return authorization: {order}",
+      changeItem: "Order change",
+      changeItemWithOrder: "Order change: {order}",
+      closeRequest: "Request decision",
+      closeRequestWithId: "Request decision: {id}",
+      lookUpItem: "Item lookup",
+      lookUpItemWithId: "Item lookup: {id}",
+    },
     site: {
       home: "Chat",
       tagline: "Sample pages to replace",
@@ -81,7 +107,18 @@ export const projectMessages: Record<Locale, ProjectMessages> = {
       "Escreva um haicai sobre testes.",
       "Liste três vantagens de projetos pequenos.",
     ],
-    toolLabels: { lookUpItem: "Consulta de item", lookUpItemWithId: "Consulta do item {id}" },
+    toolLabels: {
+      readRequest: "Consulta da solicitação",
+      readRequestWithId: "Consulta da solicitação {id}",
+      authorizeReturn: "Autorização de devolução",
+      authorizeReturnWithOrder: "Autorização de devolução {order}",
+      changeItem: "Alteração do pedido",
+      changeItemWithOrder: "Alteração do pedido {order}",
+      closeRequest: "Decisão da solicitação",
+      closeRequestWithId: "Decisão da solicitação {id}",
+      lookUpItem: "Consulta de item",
+      lookUpItemWithId: "Consulta do item {id}",
+    },
     site: {
       home: "Chat",
       tagline: "Páginas de exemplo para substituir",
@@ -119,12 +156,44 @@ export const messages: Record<Locale, Messages> = {
  * streaming, so a field it reads may be missing or empty: the label then leaves it out.
  */
 export function toolLabel(view: ToolView, t: Messages): string {
+  const labels = t.toolLabels;
   switch (view.name) {
+    case "readRequest":
+      return withField(labels.readRequest, labels.readRequestWithId, { id: requestIdIn(view) });
+    case "authorizeReturn":
+      return withField(labels.authorizeReturn, labels.authorizeReturnWithOrder, {
+        order: orderIdIn(view),
+      });
+    case "changeItem":
+      return withField(labels.changeItem, labels.changeItemWithOrder, { order: orderIdIn(view) });
+    case "closeRequest":
+      return withField(labels.closeRequest, labels.closeRequestWithId, { id: requestIdIn(view) });
     case "lookUpItem": {
       const id = stringField(view.input, "itemId")?.trim() ?? "";
-      return id === "" ? t.toolLabels.lookUpItem : format(t.toolLabels.lookUpItemWithId, { id });
+      return id === "" ? labels.lookUpItem : format(labels.lookUpItemWithId, { id });
     }
     default:
       return format(t.toolCall.generic, { name: view.name });
   }
+}
+
+/** The label with its field, or the noun alone while the field is missing or empty. */
+function withField(noun: string, withValue: string, field: Record<string, string>): string {
+  return Object.values(field).every((value) => value !== "") ? format(withValue, field) : noun;
+}
+
+/** A write's order, as the store writes it, however the model wrote it ("ao 10468"). */
+function orderIdIn(view: ToolView): string {
+  const written = stringField(view.input, "orderId")?.trim() ?? "";
+  return written === "" ? "" : normalizeOrderId(written);
+}
+
+/** The request a read's or a decision's output names, once it has one. */
+function requestIdIn(view: ToolView): string {
+  const output = view.output;
+  const request =
+    typeof output === "object" && output !== null && "request" in output
+      ? (output as { request: unknown }).request
+      : undefined;
+  return stringField(request, "id")?.trim() ?? "";
 }
