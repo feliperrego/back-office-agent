@@ -1,0 +1,168 @@
+{
+  "date": "2026-10-06T11:48:50.352Z",
+  "aborted": false,
+  "abortReason": null,
+  "mock": true,
+  "model": "mock",
+  "commit": null,
+  "caseSet": {
+    "path": "measurements/cases.json",
+    "sha256": "ea5dc134e20cb7bc18390355deec24dd496eccfa180a3117d15e35ddec34c43d",
+    "frozenOn": "2026-10-05",
+    "n": 3
+  },
+  "results": [
+    {
+      "id": "c01",
+      "group": "lookup",
+      "askedAt": "2026-10-06T11:48:50.353Z",
+      "pass": true,
+      "tally": {
+        "passed": 1,
+        "total": 1
+      },
+      "checks": [
+        {
+          "id": "tool-calls",
+          "ok": true
+        },
+        {
+          "id": "reply-mentions",
+          "ok": true
+        }
+      ],
+      "result": {
+        "message": "Is item ITM-0108 available to borrow?",
+        "reply": "Item ITM-0108 (Walnut bookshelf) is on loan.",
+        "toolCalls": [
+          {
+            "id": "mock-call-1",
+            "name": "lookUpItem",
+            "input": {
+              "itemId": "ITM-0108"
+            },
+            "output": {
+              "found": true,
+              "item": {
+                "id": "ITM-0108",
+                "name": "Walnut bookshelf",
+                "status": "on loan"
+              }
+            },
+            "state": "done"
+          }
+        ],
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 8,
+          "totalTokens": 8
+        },
+        "finishReason": "stop"
+      },
+      "latencyMs": 35
+    },
+    {
+      "id": "c02",
+      "group": "general",
+      "askedAt": "2026-10-06T11:48:50.388Z",
+      "pass": true,
+      "tally": {
+        "passed": 1,
+        "total": 1
+      },
+      "checks": [
+        {
+          "id": "tool-calls",
+          "ok": true
+        },
+        {
+          "id": "reply-mentions",
+          "ok": true
+        }
+      ],
+      "result": {
+        "message": "Why does a chat show its answer while it is still being written?",
+        "reply": "Streaming lets an answer appear while it is still being written. Instead of waiting for the whole response, the interface shows each word as soon as the model produces it. That makes a slow answer feel fast, and it gives the reader a chance to stop early when the answer is already good enough, or clearly going in the wrong direction. This paragraph comes from the mock model in the portfolio template. It is split into one chunk per word, with a short delay before the first chunk and a small gap between the rest, so tests and demos can exercise streaming, stopping, and time to first token without calling a real model or spending any money. Nothing here was generated; it is the same text every time, which keeps every test run predictable.",
+        "toolCalls": [],
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 134,
+          "totalTokens": 134
+        },
+        "finishReason": "stop"
+      },
+      "latencyMs": 164
+    },
+    {
+      "id": "c03",
+      "group": "general",
+      "askedAt": "2026-10-06T11:48:50.552Z",
+      "pass": true,
+      "tally": {
+        "passed": 1,
+        "total": 1
+      },
+      "checks": [
+        {
+          "id": "tool-calls",
+          "ok": true
+        },
+        {
+          "id": "reply-mentions",
+          "ok": true
+        }
+      ],
+      "result": {
+        "message": "What is the benefit of seeing an answer before it is complete?",
+        "reply": "Streaming lets an answer appear while it is still being written. Instead of waiting for the whole response, the interface shows each word as soon as the model produces it. That makes a slow answer feel fast, and it gives the reader a chance to stop early when the answer is already good enough, or clearly going in the wrong direction. This paragraph comes from the mock model in the portfolio template. It is split into one chunk per word, with a short delay before the first chunk and a small gap between the rest, so tests and demos can exercise streaming, stopping, and time to first token without calling a real model or spending any money. Nothing here was generated; it is the same text every time, which keeps every test run predictable.",
+        "toolCalls": [],
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 134,
+          "totalTokens": 134
+        },
+        "finishReason": "stop"
+      },
+      "latencyMs": 175
+    }
+  ],
+  "summary": {
+    "cases": 3,
+    "passed": 3,
+    "tally": {
+      "passed": 3,
+      "total": 3
+    },
+    "rate": 1,
+    "interval": {
+      "method": "wilson",
+      "level": 0.95,
+      "cases": 3,
+      "low": 0.43850296824495455,
+      "high": 1
+    },
+    "groups": [
+      {
+        "group": "lookup",
+        "cases": 1,
+        "passed": 1
+      },
+      {
+        "group": "general",
+        "cases": 2,
+        "passed": 2
+      }
+    ],
+    "failed": [],
+    "tokens": {
+      "input": 0,
+      "output": 276,
+      "total": 276,
+      "medianPerCase": 134
+    },
+    "latency": {
+      "medianMs": 164,
+      "maxMs": 175
+    }
+  }
+}

@@ -1,0 +1,5 @@
+# The frozen cases stay byte for byte: lib/eval/cases.test.ts checks their recorded SHA-256
+# (template spec §5.11).
+measurements/cases.json
+# Written by `pnpm eval` (template spec §5.11): its raw data stays as the script wrote it.
+measurements/eval-*.json

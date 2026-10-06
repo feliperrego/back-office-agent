@@ -1,0 +1,41 @@
+{
+  "about": "The template's three frozen sample cases, written on frozenOn before any run: c01 asks about one of the fictional items the sample tool lookUpItem knows (lib/tools.ts); c02 and c03 ask general questions that need no tool. A case passes when its answer calls exactly the expected tools, in order, and its reply holds every expected phrase, ignoring case (lib/eval/project.ts). The expected phrases are ones the mock model's fixed answers hold, so the mock run passes every case; no real model has answered them. A project replaces these cases with its own, frozen before its first run. The file's SHA-256 is in measurements/cases.sha256; lib/eval/cases.test.ts fails on any edit that does not update it.",
+  "frozenOn": "2026-10-05",
+  "cases": [
+    {
+      "id": "c01",
+      "group": "lookup",
+      "message": "Is item ITM-0108 available to borrow?",
+      "expected": {
+        "tools": [
+          "lookUpItem"
+        ],
+        "replyMentions": [
+          "on loan"
+        ]
+      }
+    },
+    {
+      "id": "c02",
+      "group": "general",
+      "message": "Why does a chat show its answer while it is still being written?",
+      "expected": {
+        "tools": [],
+        "replyMentions": [
+          "stream"
+        ]
+      }
+    },
+    {
+      "id": "c03",
+      "group": "general",
+      "message": "What is the benefit of seeing an answer before it is complete?",
+      "expected": {
+        "tools": [],
+        "replyMentions": [
+          "stop"
+        ]
+      }
+    }
+  ]
+}
